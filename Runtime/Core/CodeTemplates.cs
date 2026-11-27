@@ -24,6 +24,12 @@ namespace Kentavr.SheetsToSO.Core
         /// <summary>Placeholder for the enum members, each line indented by 8 spaces.</summary>
         public const string MembersPlaceholder = "{{Members}}";
 
+        /// <summary>Placeholder for the table class name.</summary>
+        public const string TableClassNamePlaceholder = "{{TableClassName}}";
+
+        /// <summary>Placeholder for the row class name in the table class template.</summary>
+        public const string RowClassNamePlaceholder = "{{RowClassName}}";
+
         /// <summary>Default row class template.</summary>
         public const string DefaultRowClass =
             "{{Header}}\n" +
@@ -44,6 +50,23 @@ namespace Kentavr.SheetsToSO.Core
             "    public enum {{EnumName}}\n" +
             "    {\n" +
             "{{Members}}\n" +
+            "    }\n" +
+            "}\n";
+
+        /// <summary>
+        /// Default table class template: makes the row class an <c>ISheetRow</c> and closes <c>SheetTable&lt;&gt;</c>.
+        /// </summary>
+        public const string DefaultTableClass =
+            "{{Header}}\n" +
+            "namespace {{Namespace}}\n" +
+            "{\n" +
+            "    public sealed partial class {{RowClassName}} : global::Kentavr.SheetsToSO.Core.ISheetRow\n" +
+            "    {\n" +
+            "        string global::Kentavr.SheetsToSO.Core.ISheetRow.Id => id;\n" +
+            "    }\n" +
+            "\n" +
+            "    public sealed class {{TableClassName}} : global::Kentavr.SheetsToSO.SheetTable<{{RowClassName}}>\n" +
+            "    {\n" +
             "    }\n" +
             "}\n";
     }

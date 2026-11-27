@@ -120,6 +120,113 @@ namespace Kentavr.SheetsToSO.Core
             return names.AsReadOnly();
         }
 
+        /// <summary>
+        /// Generates the table class of a sheet: a <c>SheetTable&lt;&gt;</c> of the row class,
+        /// plus the <c>ISheetRow</c> part of the row class (the row class must have a string field <c>id</c>).
+        /// </summary>
+        public static string GenerateTableClass(string tableClassName, string rowClassName, CodeGenOptions options)
+        {
+            ValidateName(tableClassName, nameof(tableClassName), "table class name");
+            ValidateName(rowClassName, nameof(rowClassName), "row class name");
+            if (options == null)
+                throw new ArgumentNullException(nameof(options));
+            if (tableClassName == rowClassName)
+                throw new ArgumentException(
+                    $"Table class name '{tableClassName}' must differ from the row class name", nameof(tableClassName));
+
+            return Render(options.TableClassTemplate, options.Namespace,
+                CodeTemplates.TableClassNamePlaceholder, tableClassName,
+                CodeTemplates.RowClassNamePlaceholder, rowClassName);
+        }
+
+        /// <summary>
+        /// Collects enum members from the data of <c>enum&lt;X&gt;</c> and <c>enum&lt;X&gt;[]</c> columns:
+        /// unique values in order of first appearance (sheets in order, rows top to bottom, columns left to right).
+        /// Every enum used by a column is present, with no members when none of its cells has a value.
+        /// A value that is not a valid C# name is an error in the result, not an exception.
+        /// </summary>
+        public static EnumMembersResult CollectEnumMembers(IReadOnlyList<SheetParseResult> sheets)
+        {
+            if (sheets == null)
+                throw new ArgumentNullException(nameof(sheets));
+
+            var names = new List<string>();
+            var members = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+            var seen = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+            var errors = new List<SheetError>();
+
+            for (var s = 0; s < sheets.Count; s++)
+            {
+                var sheet = sheets[s];
+                if (sheet == null)
+                    throw new ArgumentException($"Sheet at index {s} is null", nameof(sheets));
+
+                var enumColumns = new List<ColumnDefinition>();
+                foreach (var column in sheet.Columns)
+                {
+                    if (column.Type.Kind != ColumnKind.Enum)
+                        continue;
+                    enumColumns.Add(column);
+                    var enumName = column.Type.TypeName;
+                    if (!members.ContainsKey(enumName))
+                    {
+                        names.Add(enumName);
+                        members.Add(enumName, new List<string>());
+                        seen.Add(enumName, new HashSet<string>(StringComparer.Ordinal));
+                    }
+                }
+
+                if (enumColumns.Count == 0)
+                    continue;
+
+                foreach (var row in sheet.Rows)
+                {
+                    foreach (var column in enumColumns)
+                    {
+                        if (!row.Values.TryGetValue(column.Name, out var value) || value == null)
+                            continue;
+
+                        var address = CellAddress.ToA1(column.ColumnIndex, row.RowNumber);
+                        if (value is string[] elements)
+                        {
+                            for (var i = 0; i < elements.Length; i++)
+                                AddEnumMember(sheet.SheetName, column, elements[i], $"element {i + 1} '{elements[i]}'",
+                                    address, members, seen, errors);
+                        }
+                        else if (value is string text)
+                        {
+                            AddEnumMember(sheet.SheetName, column, text, $"'{text}'", address, members, seen, errors);
+                        }
+                    }
+                }
+            }
+
+            var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+            foreach (var pair in members)
+                result.Add(pair.Key, pair.Value.AsReadOnly());
+            return new EnumMembersResult(names.AsReadOnly(), result, errors.AsReadOnly());
+        }
+
+        private static void AddEnumMember(string sheetName, ColumnDefinition column, string value, string subject,
+            string address, Dictionary<string, List<string>> members, Dictionary<string, HashSet<string>> seen,
+            List<SheetError> errors)
+        {
+            if (string.IsNullOrEmpty(value))
+                return;
+
+            var enumName = column.Type.TypeName;
+            if (!CSharpIdentifier.IsValidName(value))
+            {
+                errors.Add(new SheetError(sheetName, new CellError(CellErrorCode.InvalidEnumValue, address,
+                    $"Column '{column.Name}': {subject} is not a valid enum '{enumName}' value: " +
+                    "use Latin letters, digits and '_', not starting with a digit, and not a C# keyword")));
+                return;
+            }
+
+            if (seen[enumName].Add(value))
+                members[enumName].Add(value);
+        }
+
         private static string ToCSharpType(ColumnType type)
         {
             string baseName;
