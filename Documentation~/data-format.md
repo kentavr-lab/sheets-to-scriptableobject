@@ -8,7 +8,7 @@
 
 | Источник | Как подключается | Примечание |
 |---|---|---|
-| Google Sheets API v4 + API-ключ | `values:batchGet`, `valueRenderOption=UNFORMATTED_VALUE` | **Рекомендуемый.** Таблица открыта «всем, у кого есть ссылка — просмотр». |
+| Google Sheets API v4 + API-ключ | `values:batchGet`, `valueRenderOption=UNFORMATTED_VALUE`, `dateTimeRenderOption=SERIAL_NUMBER` | **Рекомендуемый.** Таблица открыта «всем, у кого есть ссылка — просмотр». Даты и время приходят серийным числом (например, `46349.5`), `bool` — как `TRUE` / `FALSE`. |
 | Экспорт CSV по ссылке | `https://docs.google.com/spreadsheets/d/<ID>/export?format=csv&gid=<GID>` | Одна вкладка на ссылку. |
 | Локальные файлы | CSV или TSV | Один файл = одна вкладка. |
 
