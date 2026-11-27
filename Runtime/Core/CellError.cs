@@ -12,6 +12,9 @@ namespace Kentavr.SheetsToSO.Core
         InvalidFloat,
         InvalidBool,
         EmptyArrayElement,
+        EmptyId,
+        InvalidId,
+        DuplicateId,
     }
 
     /// <summary>
