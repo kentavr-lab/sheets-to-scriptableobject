@@ -20,7 +20,8 @@ namespace Kentavr.SheetsToSO.Core
 
         /// <summary>
         /// Values of enums that were not given as known enums: unique valid values in order of first appearance.
-        /// Ready to pass to <see cref="CodeGenerator.GenerateEnum"/>.
+        /// Ready to pass to <see cref="CodeGenerator.GenerateEnum"/>. Every such enum used by a column is present,
+        /// with an empty list when none of its cells has a value, so the field type is not lost.
         /// </summary>
         public IReadOnlyDictionary<string, IReadOnlyList<string>> CollectedEnums { get; }
 

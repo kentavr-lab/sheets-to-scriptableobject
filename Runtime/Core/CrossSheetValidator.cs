@@ -16,7 +16,12 @@ namespace Kentavr.SheetsToSO.Core
         /// <param name="knownEnums">
         /// Allowed values per enum name. Values of listed enums must match exactly (ordinal);
         /// values of other enums must be valid C# names and are returned in <see cref="CrossSheetResult.CollectedEnums"/>.
+        /// May be <c>null</c>; a <c>null</c> value list for an enum throws <see cref="ArgumentException"/>.
         /// </param>
+        /// <exception cref="ArgumentNullException"><paramref name="sheets"/> is <c>null</c>.</exception>
+        /// <exception cref="ArgumentException">
+        /// <paramref name="sheets"/> contains <c>null</c> or duplicate sheet names, or <paramref name="knownEnums"/> has a <c>null</c> value list.
+        /// </exception>
         public static CrossSheetResult Validate(IReadOnlyList<SheetParseResult> sheets,
             IReadOnlyDictionary<string, IReadOnlyCollection<string>> knownEnums = null)
         {
