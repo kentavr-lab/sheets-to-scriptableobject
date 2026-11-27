@@ -1,0 +1,17 @@
+{
+  "name": "com.kentavr-lab.sheets-to-scriptableobject",
+  "version": "0.1.0",
+  "displayName": "Sheets to ScriptableObject",
+  "description": "Import Google Sheets and CSV tables into typed ScriptableObject configs with data validation and a diff preview before import.",
+  "unity": "2021.3",
+  "license": "MIT",
+  "author": {
+    "name": "kentavr-lab",
+    "url": "https://github.com/kentavr-lab"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kentavr-lab/sheets-to-scriptableobject.git"
+  },
+  "dependencies": {}
+}
