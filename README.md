@@ -37,6 +37,40 @@ https://github.com/kentavr-lab/sheets-to-scriptableobject.git#v0.1.0
 
 **С диска.** Склонируйте репозиторий, затем *Package Manager → + → Add package from disk…* и выберите `package.json` в корне клона.
 
+## Использование
+
+Класс строки — `[Serializable]` с `ISheetRow`, таблица — наследник `SheetTable<>`:
+
+```csharp
+using System;
+using Kentavr.SheetsToSO;
+using Kentavr.SheetsToSO.Core;
+using UnityEngine;
+
+[Serializable]
+public class UnitRow : ISheetRow
+{
+    [SerializeField] private string id;
+    public int hp;
+
+    public string Id => id;
+}
+
+[CreateAssetMenu(menuName = "Tables/Units")]
+public sealed class UnitsTable : SheetTable<UnitRow> {}
+```
+
+Поиск по `id` (регистр важен):
+
+```csharp
+if (unitsTable.TryGet("knight", out var knight))
+{
+    Debug.Log(knight.hp);
+}
+```
+
+Строки без `id` в поиск не попадают; при повторе `id` используется первая строка. Об обоих случаях пишется ошибка в консоль со ссылкой на ассет.
+
 ## Документация
 
 - [Формат данных](Documentation~/data-format.md) — источники, правила таблицы, типы, что считается ошибкой.
