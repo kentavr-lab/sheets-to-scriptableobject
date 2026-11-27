@@ -12,19 +12,6 @@ namespace Kentavr.SheetsToSO.Core
         private const int HeaderRow = 1;
         private const string IdColumnName = "id";
 
-        // Reserved C# keywords (77). Contextual keywords such as var, value, record are allowed.
-        private static readonly HashSet<string> CSharpKeywords = new HashSet<string>(StringComparer.Ordinal)
-        {
-            "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char", "checked",
-            "class", "const", "continue", "decimal", "default", "delegate", "do", "double", "else", "enum",
-            "event", "explicit", "extern", "false", "finally", "fixed", "float", "for", "foreach", "goto",
-            "if", "implicit", "in", "int", "interface", "internal", "is", "lock", "long", "namespace",
-            "new", "null", "object", "operator", "out", "override", "params", "private", "protected", "public",
-            "readonly", "ref", "return", "sbyte", "sealed", "short", "sizeof", "stackalloc", "static", "string",
-            "struct", "switch", "this", "throw", "true", "try", "typeof", "uint", "ulong", "unchecked",
-            "unsafe", "ushort", "using", "virtual", "void", "volatile", "while",
-        };
-
         /// <summary>
         /// Parses header cells. Data errors are collected into the result, never thrown.
         /// </summary>
@@ -94,11 +81,11 @@ namespace Kentavr.SheetsToSO.Core
             if (name.Length == 0)
                 return new HeaderError(HeaderErrorCode.EmptyName, address, $"Empty column name in '{text}'");
 
-            if (!IsIdentifier(name))
+            if (!CSharpIdentifier.IsIdentifier(name))
                 return new HeaderError(HeaderErrorCode.InvalidName, address,
                     $"Invalid column name '{name}': use Latin letters, digits and '_', not starting with a digit");
 
-            if (CSharpKeywords.Contains(name))
+            if (CSharpIdentifier.IsKeyword(name))
                 return new HeaderError(HeaderErrorCode.CSharpKeyword, address,
                     $"Column name '{name}' is a reserved C# keyword");
 
@@ -165,26 +152,10 @@ namespace Kentavr.SheetsToSO.Core
                 return false;
 
             var inner = text.Substring(prefix.Length, text.Length - prefix.Length - 1);
-            if (!IsIdentifier(inner))
+            if (!CSharpIdentifier.IsIdentifier(inner))
                 return false;
 
             argument = inner;
-            return true;
-        }
-
-        private static bool IsIdentifier(string value)
-        {
-            if (value.Length == 0)
-                return false;
-
-            for (var i = 0; i < value.Length; i++)
-            {
-                var c = value[i];
-                var isLetter = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_';
-                var isDigit = c >= '0' && c <= '9';
-                if (!(isLetter || (i > 0 && isDigit)))
-                    return false;
-            }
             return true;
         }
 
