@@ -14,7 +14,10 @@ namespace Kentavr.SheetsToSO.Core
     /// </summary>
     public sealed class CsvExportSource
     {
-        private const string SharingHint = "check that the spreadsheet is shared as 'Anyone with the link — Viewer'";
+        private const string SharedAsViewer = "shared as 'Anyone with the link — Viewer'";
+        private const string SharingHint = "check that the spreadsheet is " + SharedAsViewer;
+        private const string ExistsAndSharingHint = "check that the spreadsheet exists and is " + SharedAsViewer;
+        private const char ByteOrderMark = (char)0xFEFF;
 
         private static readonly Encoding Utf8 = new UTF8Encoding(false, false);
 
@@ -68,7 +71,7 @@ namespace Kentavr.SheetsToSO.Core
             }
             catch (HttpRequestException exception)
             {
-                return Failed(SourceErrorCode.NetworkError, exception.Message);
+                return Failed(SourceErrorCode.NetworkError, "Request to " + uri + " failed: " + exception.Message);
             }
             catch (TaskCanceledException exception) when (!cancellationToken.IsCancellationRequested)
             {
@@ -84,7 +87,7 @@ namespace Kentavr.SheetsToSO.Core
             {
                 var message = "HTTP " + code + (string.IsNullOrEmpty(reason) ? string.Empty : " " + reason) + " for " + uri;
                 if (status == HttpStatusCode.Unauthorized || status == HttpStatusCode.Forbidden || status == HttpStatusCode.NotFound)
-                    message += "; check that the spreadsheet exists and is shared as 'Anyone with the link — Viewer'";
+                    message += "; " + ExistsAndSharingHint;
                 return Failed(SourceErrorCode.HttpError, message);
             }
 
@@ -105,7 +108,7 @@ namespace Kentavr.SheetsToSO.Core
         {
             foreach (var c in text)
             {
-                if (c == '﻿' || char.IsWhiteSpace(c))
+                if (c == ByteOrderMark || char.IsWhiteSpace(c))
                     continue;
                 return c == '<';
             }

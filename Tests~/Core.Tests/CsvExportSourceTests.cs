@@ -168,7 +168,7 @@ namespace Kentavr.SheetsToSO.Core.Tests
         [TestCase("text/csv")]
         public async Task LoadAsync_HtmlBody_IsNotCsv(string contentType)
         {
-            var body = "﻿ \r\n\t<!DOCTYPE html><html><head><title>Sign in</title></head></html>";
+            var body = (char)0xFEFF + " \r\n\t<!DOCTYPE html><html><head><title>Sign in</title></head></html>";
             var result = await LoadAsync(FakeHttpMessageHandler.Respond(HttpStatusCode.OK, body, contentType));
 
             var error = ErrorOf(result);
@@ -224,6 +224,7 @@ namespace Kentavr.SheetsToSO.Core.Tests
             var error = ErrorOf(result);
             Assert.That(error.Code, Is.EqualTo(SourceErrorCode.NetworkError));
             Assert.That(error.Message, Does.Contain("No such host is known"));
+            Assert.That(error.Message, Does.Contain(ExpectedUri));
         }
 
         [Test]
