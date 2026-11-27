@@ -9,7 +9,7 @@ namespace Kentavr.SheetsToSO.Core
     /// </summary>
     public static class DiffReport
     {
-        private const string Arrow = " → ";
+        internal const string Arrow =" → ";
         private const string MissingText = "(missing)";
 
         /// <summary>

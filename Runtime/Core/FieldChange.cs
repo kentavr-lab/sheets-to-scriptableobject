@@ -44,7 +44,7 @@ namespace Kentavr.SheetsToSO.Core
 
         public override string ToString()
         {
-            return Column + ": " + OldText + " → " + NewText;
+            return Column + ": " + OldText + DiffReport.Arrow + NewText;
         }
     }
 }
