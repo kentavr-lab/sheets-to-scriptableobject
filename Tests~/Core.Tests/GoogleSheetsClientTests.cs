@@ -656,6 +656,19 @@ namespace Kentavr.SheetsToSO.Core.Tests
         }
 
         [Test]
+        public void CancellationDuringBodyReadIsObserved()
+        {
+            using var cts = new CancellationTokenSource();
+            _handler.Enqueue(_ => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new CancelOnReadContent("{\"sheets\":[]}", cts),
+            });
+
+            Assert.CatchAsync<OperationCanceledException>(() => _client.GetSheetsAsync(SpreadsheetId, cts.Token));
+            Assert.That(_handler.Requests, Has.Count.EqualTo(1));
+        }
+
+        [Test]
         public void AlreadyCancelledTokenSendsNothing()
         {
             using var cts = new CancellationTokenSource();
@@ -689,6 +702,31 @@ namespace Kentavr.SheetsToSO.Core.Tests
                 setup(response);
                 return response;
             };
+
+        /// <summary>Cancels the token while the body is being read.</summary>
+        private sealed class CancelOnReadContent : HttpContent
+        {
+            private readonly byte[] _bytes;
+            private readonly CancellationTokenSource _cts;
+
+            public CancelOnReadContent(string body, CancellationTokenSource cts)
+            {
+                _bytes = Encoding.UTF8.GetBytes(body);
+                _cts = cts;
+            }
+
+            protected override async Task SerializeToStreamAsync(System.IO.Stream stream, TransportContext context)
+            {
+                _cts.Cancel();
+                await stream.WriteAsync(_bytes, 0, _bytes.Length);
+            }
+
+            protected override bool TryComputeLength(out long length)
+            {
+                length = _bytes.Length;
+                return true;
+            }
+        }
 
         private sealed class RecordedRequest
         {
