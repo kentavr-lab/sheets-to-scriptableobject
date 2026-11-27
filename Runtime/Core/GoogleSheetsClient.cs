@@ -188,6 +188,8 @@ namespace Kentavr.SheetsToSO.Core
                         var body = response.Content == null
                             ? ""
                             : await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        // netstandard2.1 has no ReadAsStringAsync(CancellationToken); check right after reading.
+                        ct.ThrowIfCancellationRequested();
 
                         if (status >= 200 && status < 300)
                         {
