@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <AssemblyName>Kentavr.SheetsToSO.Core</AssemblyName>
+    <RootNamespace>Kentavr.SheetsToSO.Core</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <!-- Compile the same sources Unity compiles, so dotnet test checks the shipped code. -->
+  <ItemGroup>
+    <Compile Include="../../Runtime/Core/**/*.cs" />
+  </ItemGroup>
+
+</Project>
