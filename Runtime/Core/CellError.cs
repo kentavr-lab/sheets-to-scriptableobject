@@ -12,6 +12,21 @@ namespace Kentavr.SheetsToSO.Core
         InvalidFloat,
         InvalidBool,
         EmptyArrayElement,
+        EmptyId,
+        InvalidId,
+        DuplicateId,
+
+        /// <summary>The sheet named in <c>ref&lt;X&gt;</c> is not among the validated sheets.</summary>
+        UnknownRefSheet,
+
+        /// <summary>The referenced sheet has no row with the given <c>id</c>.</summary>
+        BrokenRef,
+
+        /// <summary>The value is not in the list of allowed enum values.</summary>
+        UnknownEnumValue,
+
+        /// <summary>No list of allowed enum values was given, and the value is not a valid C# name.</summary>
+        InvalidEnumValue,
     }
 
     /// <summary>
