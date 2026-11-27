@@ -13,6 +13,15 @@ namespace Kentavr.SheetsToSO.Core
         DuplicateName,
         UnknownType,
         MissingIdColumn,
+
+        /// <summary>Schema from code: the header type differs from the field type.</summary>
+        TypeMismatch,
+
+        /// <summary>Schema from code: the row class has no field with the column name.</summary>
+        UnknownField,
+
+        /// <summary>Schema from code: the field type is not one of the v1 types.</summary>
+        UnsupportedFieldType,
     }
 
     /// <summary>

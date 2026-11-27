@@ -19,6 +19,43 @@ namespace Kentavr.SheetsToSO.Core
         /// <param name="rows">Sheet rows; <c>rows[i]</c> is row number <c>i + 1</c>, row 1 is the header.</param>
         public static SheetParseResult Parse(string sheetName, IReadOnlyList<IReadOnlyList<string>> rows)
         {
+            ValidateArguments(sheetName, rows);
+
+            var errors = new List<SheetError>();
+            var header = HeaderParser.Parse(rows.Count > 0 ? rows[0] : Array.Empty<string>());
+            foreach (var error in header.Errors)
+                errors.Add(new SheetError(sheetName, error));
+
+            return ParseRows(sheetName, rows, header.Columns, errors);
+        }
+
+        /// <summary>
+        /// Parses a sheet in schema-from-code mode: column types come from the fields of <paramref name="rowType"/>.
+        /// Data errors are collected into the result, never thrown.
+        /// </summary>
+        /// <param name="sheetName">Sheet name used as the error address prefix (<c>"Units!B7"</c>).</param>
+        /// <param name="rows">Sheet rows; <c>rows[i]</c> is row number <c>i + 1</c>, row 1 is the header.</param>
+        /// <param name="rowType">Hand-written row class; columns are matched to its fields by name.</param>
+        public static SheetParseResult Parse(string sheetName, IReadOnlyList<IReadOnlyList<string>> rows, Type rowType)
+        {
+            ValidateArguments(sheetName, rows);
+            if (rowType == null)
+                throw new ArgumentNullException(nameof(rowType));
+
+            var errors = new List<SheetError>();
+            var header = HeaderParser.Parse(rows.Count > 0 ? rows[0] : Array.Empty<string>());
+            foreach (var error in header.Errors)
+                errors.Add(new SheetError(sheetName, error));
+
+            var schema = CodeSchema.Resolve(rowType, header.Columns);
+            foreach (var error in schema.Errors)
+                errors.Add(new SheetError(sheetName, error));
+
+            return ParseRows(sheetName, rows, schema.Columns, errors);
+        }
+
+        private static void ValidateArguments(string sheetName, IReadOnlyList<IReadOnlyList<string>> rows)
+        {
             if (string.IsNullOrEmpty(sheetName))
                 throw new ArgumentException("Sheet name must not be null or empty.", nameof(sheetName));
             if (rows == null)
@@ -28,15 +65,13 @@ namespace Kentavr.SheetsToSO.Core
                 if (rows[i] == null)
                     throw new ArgumentException($"Row {i + 1} is null.", nameof(rows));
             }
+        }
 
-            var errors = new List<SheetError>();
+        private static SheetParseResult ParseRows(string sheetName, IReadOnlyList<IReadOnlyList<string>> rows,
+            IReadOnlyList<ColumnDefinition> columns, List<SheetError> errors)
+        {
             var sheetRows = new List<SheetRow>();
 
-            var header = HeaderParser.Parse(rows.Count > 0 ? rows[0] : Array.Empty<string>());
-            foreach (var error in header.Errors)
-                errors.Add(new SheetError(sheetName, error));
-
-            var columns = header.Columns;
             ColumnDefinition idColumn = null;
             foreach (var column in columns)
             {
