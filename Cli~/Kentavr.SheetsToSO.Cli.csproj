@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <AssemblyName>sheets-to-so</AssemblyName>
+    <RootNamespace>Kentavr.SheetsToSO.Cli</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- The core is compiled from Runtime/Core/ by this project; no sources are copied. -->
+  <ItemGroup>
+    <ProjectReference Include="../Tests~/Core/Kentavr.SheetsToSO.Core.csproj" />
+  </ItemGroup>
+
+</Project>
