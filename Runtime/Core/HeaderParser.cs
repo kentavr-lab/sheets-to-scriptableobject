@@ -63,7 +63,10 @@ namespace Kentavr.SheetsToSO.Core
                 if (error != null)
                     errors.Add(error);
                 else
+                {
+                    seenNames.Add(column.Name, column.Address);
                     columns.Add(column);
+                }
             }
 
             if (!firstColumnSeen)
@@ -108,7 +111,6 @@ namespace Kentavr.SheetsToSO.Core
             if (seenNames.TryGetValue(name, out var firstAddress))
                 return new HeaderError(HeaderErrorCode.DuplicateName, address,
                     $"Duplicate column name '{name}', already defined in {firstAddress}");
-            seenNames.Add(name, address);
 
             column = new ColumnDefinition(name, type, isRequired, isTypeExplicit, index, address);
             return null;

@@ -251,6 +251,16 @@ namespace Kentavr.SheetsToSO.Core.Tests
         }
 
         [Test]
+        public void ColumnWithErrorDoesNotCountAsDuplicate()
+        {
+            var result = Parse("name", "id", "name", "hp:integer", "hp:int");
+
+            Assert.That(result.Errors.Select(e => e.Code), Is.EqualTo(new[] { HeaderErrorCode.MissingIdColumn, HeaderErrorCode.UnknownType }));
+            Assert.That(result.Errors.Select(e => e.Address), Is.EqualTo(new[] { "A1", "D1" }));
+            Assert.That(result.Columns.Select(c => c.Name), Is.EqualTo(new[] { "id", "name", "hp" }));
+        }
+
+        [Test]
         public void SkippedColumnDoesNotCountAsDuplicate()
         {
             Assert.That(Parse("id", "#hp", "hp:int").IsValid, Is.True);
