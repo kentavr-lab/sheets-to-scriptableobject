@@ -119,7 +119,6 @@ Sheets: 2, errors: 2, warnings: 0
 | `Kentavr.SheetsToSO.Core` | `Runtime/Core/` | Весь конвейер без Unity: источники, разбор, проверка, diff. Не ссылается на `UnityEngine`/`UnityEditor` и сторонние библиотеки, поэтому работает в редакторе, в консоли и в CI. |
 | `Kentavr.SheetsToSO` | `Runtime/` | Рантайм: базовый ScriptableObject таблицы с поиском по `id`. |
 | `Kentavr.SheetsToSO.Editor` | `Editor/` | Только редактор: окно импорта, кодогенерация, хранение API-ключа. |
-
 | — | `Cli~/` | Консольное приложение `sheets-to-so` для CI: проверка вкладок с кодом выхода. Ссылается на ядро через `Tests~/Core`, в пакет для Unity не попадает. |
 
 Папки `Cli~/`, `Documentation~/` и `Tests~/` Unity не импортирует.
