@@ -89,6 +89,11 @@ namespace Kentavr.SheetsToSO.Editor
                 ct.ThrowIfCancellationRequested();
                 var name = (sheet.name ?? string.Empty).Trim();
                 var gid = (sheet.gid ?? string.Empty).Trim();
+                if (gid.Length == 0 || !gid.All(c => c >= '0' && c <= '9'))
+                {
+                    result.Errors.Add($"{name}: {SourceErrorCode.InvalidGid}: gid '{gid}' must be a number from the sheet URL (gid=…)");
+                    continue;
+                }
 
                 CsvExportResult loaded;
                 try

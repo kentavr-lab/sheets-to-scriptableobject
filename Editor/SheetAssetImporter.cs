@@ -19,7 +19,10 @@ namespace Kentavr.SheetsToSO.Editor
         /// <summary>Request saved before a script reload; read and deleted after it.</summary>
         internal const string PendingImportPath = "Library/Kentavr.SheetsToSO/pending-import.json";
 
-        /// <summary>Raw sheets of the last applied import, one file per asset folder; the "before" side of the diff.</summary>
+        /// <summary>
+        /// Raw sheets as last applied, one file per asset folder; the "before" side of the diff.
+        /// Each import replaces its own sheets and keeps the others.
+        /// </summary>
         internal const string SnapshotFolder = "Library/Kentavr.SheetsToSO/snapshots";
 
         private const string LogPrefix = "Sheets to SO: ";
@@ -375,13 +378,34 @@ namespace Kentavr.SheetsToSO.Editor
             return snapshot?.sheets ?? new List<SheetImportSheet>();
         }
 
+        // Replaces the imported sheets in the snapshot and keeps the others, so a partial import
+        // does not hide the earlier state of the sheets left out.
         private static void SaveSnapshot(SheetImportRequest request)
         {
             var path = SnapshotPath(request.assetFolder);
+
+            List<SheetImportSheet> previous;
+            try
+            {
+                previous = ReadSnapshot(request.assetFolder);
+            }
+            catch (Exception)
+            {
+                // Unreadable snapshot: start over with this import.
+                previous = new List<SheetImportSheet>();
+            }
+
+            // Same rule as for sheet names in an import: one asset file per name, case-insensitive.
+            var imported = new HashSet<string>(request.sheets.Select(sheet => sheet.name), StringComparer.OrdinalIgnoreCase);
+            var sheets = previous
+                .Where(sheet => sheet != null && !string.IsNullOrEmpty(sheet.name) && !imported.Contains(sheet.name))
+                .Concat(request.sheets)
+                .ToList();
+
             try
             {
                 Directory.CreateDirectory(SnapshotFolder);
-                File.WriteAllText(path, JsonUtility.ToJson(new Snapshot { sheets = request.sheets }), Utf8NoBom);
+                File.WriteAllText(path, JsonUtility.ToJson(new Snapshot { sheets = sheets }), Utf8NoBom);
             }
             catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
             {

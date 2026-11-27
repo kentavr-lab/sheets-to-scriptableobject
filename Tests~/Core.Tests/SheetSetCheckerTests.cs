@@ -200,16 +200,48 @@ namespace Kentavr.SheetsToSO.Core.Tests
         }
 
         [Test]
-        public void DiffReportsRemovals()
+        public void DiffReportsRemovedRows()
         {
             var previous = Set(Units(Knight, Peasant), Weapons());
 
-            var removedRow = SheetSetChecker.Diff(previous, Valid(Units(Knight), Weapons()));
-            var removedSheet = SheetSetChecker.Diff(Set(Weapons(), Sheet("Old", new[] { "id" }, new[] { "a" })), Valid(Weapons()));
+            var diff = SheetSetChecker.Diff(previous, Valid(Units(Knight), Weapons()));
 
-            Assert.That(removedRow.HasRemovals, Is.True);
-            Assert.That(removedSheet.HasRemovals, Is.True);
-            Assert.That(removedSheet.Text, Is.EqualTo("- Old (removed sheet, 1 row)"));
+            Assert.That(diff.HasRemovals, Is.True);
+            Assert.That(diff.Text, Is.EqualTo("Units: +0 -1 ~0\n  - peasant"));
+        }
+
+        [Test]
+        public void DiffIgnoresSnapshotSheetsNotInCurrentSet()
+        {
+            var previous = Set(Weapons(), Sheet("Old", new[] { "id" }, new[] { "a" }));
+
+            var diff = SheetSetChecker.Diff(previous, Valid(Weapons()));
+
+            Assert.That(diff.HasRemovals, Is.False);
+            Assert.That(diff.Text, Is.EqualTo("No changes"));
+        }
+
+        [Test]
+        public void DiffIgnoresErrorsOfSnapshotSheetsNotInCurrentSet()
+        {
+            var previous = Set(Weapons(), Sheet("Old", new[] { "id", "hp:int" }, new[] { "a", "abc" }));
+
+            var diff = SheetSetChecker.Diff(previous, Valid(Weapons()));
+
+            Assert.That(diff.IsAvailable, Is.True);
+            Assert.That(diff.Text, Is.EqualTo("No changes"));
+        }
+
+        [Test]
+        public void DiffDoesNotRecheckRefsOfSnapshot()
+        {
+            // Snapshot sheets may come from different imports: Units refers to a weapon no longer in Weapons.
+            var previous = Set(Units(Knight), Sheet("Weapons", WeaponsHeader, new[] { "w_02", "20" }));
+
+            var diff = SheetSetChecker.Diff(previous, Valid(Units(Knight), Weapons()));
+
+            Assert.That(diff.IsAvailable, Is.True);
+            Assert.That(diff.Text, Is.EqualTo("Weapons: +1 -0 ~0\n  + w_01"));
         }
 
         [Test]

@@ -10,7 +10,7 @@ namespace Kentavr.SheetsToSO.Core
     public static class SheetSetChecker
     {
         /// <summary>Shown instead of a diff when the previous snapshot has errors.</summary>
-        public const string PreviousUnreadableText = "Предыдущий снимок не читается, diff недоступен";
+        public const string PreviousUnreadableText = "Previous snapshot cannot be read, diff is not available";
 
         private const string TableSuffix = "Table";
 
@@ -92,11 +92,14 @@ namespace Kentavr.SheetsToSO.Core
         }
 
         /// <summary>
-        /// Compares the previous snapshot with checked sheets. An empty or <c>null</c> snapshot gives every sheet as added.
-        /// When the previous snapshot has errors, no diff is built and <see cref="SheetSetDiffResult.Text"/> says why;
-        /// this is not an import error.
+        /// Compares the previous snapshot with checked sheets. Only previous sheets whose names (ordinal) are in
+        /// <paramref name="current"/> take part: a sheet left out of this import is not shown as removed.
+        /// A sheet missing from the snapshot (or an empty / <c>null</c> snapshot) is shown as added.
+        /// When a compared previous sheet does not parse without errors, no diff is built and
+        /// <see cref="SheetSetDiffResult.Text"/> says why; this is not an import error.
+        /// Cross-sheet checks are not repeated for the snapshot: its sheets may come from different imports.
         /// </summary>
-        /// <param name="previous">Raw sheets of the previous import, as for <see cref="Check"/>.</param>
+        /// <param name="previous">Raw sheets of the previous imports, as for <see cref="Check"/>.</param>
         /// <param name="current">Result of <see cref="Check"/> without errors.</param>
         /// <exception cref="ArgumentException"><paramref name="current"/> has errors.</exception>
         public static SheetSetDiffResult Diff(IReadOnlyList<(string Name, IReadOnlyList<IReadOnlyList<string>> Rows)> previous,
@@ -107,18 +110,31 @@ namespace Kentavr.SheetsToSO.Core
             if (!current.IsValid)
                 throw new ArgumentException("Sheets have errors; diff needs checked data.", nameof(current));
 
-            IReadOnlyList<SheetParseResult> before = Array.Empty<SheetParseResult>();
-            if (previous != null && previous.Count > 0)
+            var currentNames = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var sheet in current.Sheets)
+                currentNames.Add(sheet.SheetName);
+
+            var before = new List<SheetParseResult>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var source in previous ?? Array.Empty<(string, IReadOnlyList<IReadOnlyList<string>>)>())
             {
-                var old = Check(previous);
-                if (!old.IsValid)
-                    return new SheetSetDiffResult(null, PreviousUnreadableText + ": " + old.Errors[0]);
-                before = old.Sheets;
+                if (string.IsNullOrEmpty(source.Name) || !currentNames.Contains(source.Name))
+                    continue;
+                if (!seen.Add(source.Name))
+                    return Unreadable($"Duplicate sheet name '{source.Name}'");
+
+                var sheet = SheetParser.Parse(source.Name, Rows(source.Rows));
+                if (!sheet.IsValid)
+                    return Unreadable(sheet.Errors[0].ToString());
+                before.Add(sheet);
             }
 
             var diff = SnapshotDiffer.Compare(before, current.Sheets);
             return new SheetSetDiffResult(diff, DiffReport.Format(diff));
         }
+
+        private static SheetSetDiffResult Unreadable(string reason) =>
+            new SheetSetDiffResult(null, PreviousUnreadableText + ": " + reason);
 
         private static IReadOnlyList<IReadOnlyList<string>> Rows(IReadOnlyList<IReadOnlyList<string>> rows)
         {
