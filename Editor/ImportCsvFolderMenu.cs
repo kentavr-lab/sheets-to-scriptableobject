@@ -1,16 +1,13 @@
-using System;
+using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
-using Kentavr.SheetsToSO.Core;
 using UnityEditor;
 using UnityEngine;
 
 namespace Kentavr.SheetsToSO.Editor
 {
     /// <summary>
-    /// Temporary command to try the importer before the import window exists:
-    /// imports every .csv/.tsv file of a folder on disk into the selected project folder.
+    /// Temporary command: imports every .csv/.tsv file of a folder on disk into the selected project folder.
+    /// The main way to import is <see cref="SheetImportWindow"/>.
     /// </summary>
     internal static class ImportCsvFolderMenu
     {
@@ -36,10 +33,7 @@ namespace Kentavr.SheetsToSO.Editor
             if (string.IsNullOrEmpty(source))
                 return;
 
-            var files = Directory.GetFiles(source)
-                .Where(IsSheetFile)
-                .OrderBy(file => Path.GetFileName(file), StringComparer.Ordinal)
-                .ToList();
+            var files = CsvFolderSource.ListFiles(source, false);
             if (files.Count == 0)
             {
                 Debug.LogError(LogPrefix + $"no .csv or .tsv files in '{source}'");
@@ -53,44 +47,23 @@ namespace Kentavr.SheetsToSO.Editor
                 @namespace = Namespace,
             };
 
-            var hasErrors = false;
+            var errors = new List<string>();
             foreach (var file in files)
             {
-                var delimiter = string.Equals(Path.GetExtension(file), ".tsv", StringComparison.OrdinalIgnoreCase)
-                    ? CsvDelimiter.Tab
-                    : CsvDelimiter.Comma;
-                var result = CsvReader.Read(File.ReadAllText(file, Encoding.UTF8), delimiter);
-                if (!result.IsValid)
-                {
-                    foreach (var error in result.Errors)
-                        Debug.LogError(LogPrefix + $"{Path.GetFileName(file)}: {error}");
-                    hasErrors = true;
-                    continue;
-                }
-
-                var sheet = new SheetImportSheet { name = Path.GetFileNameWithoutExtension(file) };
-                foreach (var row in result.Rows)
-                    sheet.rows.Add(new SheetImportRow { cells = row.Cells.ToList() });
-                request.sheets.Add(sheet);
+                var sheet = CsvFolderSource.Read(Path.Combine(source, file), errors);
+                if (sheet != null)
+                    request.sheets.Add(sheet);
             }
 
-            if (hasErrors)
+            if (errors.Count > 0)
             {
+                foreach (var error in errors)
+                    Debug.LogError(LogPrefix + error);
                 Debug.LogError(LogPrefix + "import cancelled: fix the CSV errors above");
                 return;
             }
 
             SheetAssetImporter.Import(request);
-        }
-
-        private static bool IsSheetFile(string path)
-        {
-            var name = Path.GetFileName(path);
-            if (name.StartsWith("#", StringComparison.Ordinal))
-                return false;
-            var extension = Path.GetExtension(path);
-            return string.Equals(extension, ".csv", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(extension, ".tsv", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string GetSelectedFolder()
