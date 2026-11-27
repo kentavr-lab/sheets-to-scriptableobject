@@ -140,7 +140,8 @@ namespace Kentavr.SheetsToSO.Editor
             if (prepared.Request.sheets.Count == 0)
                 report.Errors.Add("No sheets to import");
 
-            var names = new HashSet<string>(StringComparer.Ordinal);
+            // Ignore case: each sheet becomes files, and file names are case-insensitive on Windows and macOS.
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var source in prepared.Request.sheets)
             {
                 if (source == null || string.IsNullOrEmpty(source.name))
@@ -178,8 +179,9 @@ namespace Kentavr.SheetsToSO.Editor
             foreach (var error in prepared.Enums.Errors)
                 report.Errors.Add(error.ToString());
 
-            // Row classes, table classes and enums share one namespace.
-            var typeOwners = new Dictionary<string, string>(StringComparer.Ordinal);
+            // Row classes, table classes and enums share one namespace and one code folder (one file per type,
+            // so names are compared ignoring case).
+            var typeOwners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var sheet in prepared.Sheets)
             {
                 AddTypeName(typeOwners, sheet.SheetName, $"row class of sheet '{sheet.SheetName}'", report);
@@ -345,6 +347,8 @@ namespace Kentavr.SheetsToSO.Editor
                 else
                 {
                     var asset = ScriptableObject.CreateInstance(tableType);
+                    // Name it before SetRows so index messages name the table.
+                    asset.name = sheet.SheetName;
                     ((ISheetTableData)asset).SetRows(rows);
                     AssetDatabase.CreateAsset(asset, path);
                     report.CreatedAssets.Add(path);
@@ -359,7 +363,7 @@ namespace Kentavr.SheetsToSO.Editor
         private static void FindAssetsWithoutSheet(PreparedImport prepared, SheetImportReport report)
         {
             var folder = prepared.Request.assetFolder;
-            var names = new HashSet<string>(prepared.Sheets.Select(sheet => sheet.SheetName), StringComparer.Ordinal);
+            var names = new HashSet<string>(prepared.Sheets.Select(sheet => sheet.SheetName), StringComparer.OrdinalIgnoreCase);
             var files = Directory.GetFiles(folder, "*.asset", SearchOption.TopDirectoryOnly)
                 .Select(file => file.Replace('\\', '/'))
                 .OrderBy(file => file, StringComparer.Ordinal);
