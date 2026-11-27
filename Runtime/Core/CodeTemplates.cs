@@ -29,7 +29,7 @@ namespace Kentavr.SheetsToSO.Core
             "{{Header}}\n" +
             "namespace {{Namespace}}\n" +
             "{\n" +
-            "    [System.Serializable]\n" +
+            "    [global::System.Serializable]\n" +
             "    public sealed partial class {{ClassName}}\n" +
             "    {\n" +
             "{{Fields}}\n" +

@@ -23,7 +23,7 @@ namespace Kentavr.SheetsToSO.Core.Tests
             "// </auto-generated>\n" +
             "namespace Game.Data\n" +
             "{\n" +
-            "    [System.Serializable]\n" +
+            "    [global::System.Serializable]\n" +
             "    public sealed partial class Units\n" +
             "    {\n" +
             "        public string id;\n" +
@@ -325,6 +325,23 @@ namespace Kentavr.SheetsToSO.Core.Tests
                 CodeGenerator.GenerateRowClass("Units", columns, options),
                 CodeGenerator.GenerateEnum("Rarity", RarityMembers, options),
                 CodeGenerator.GenerateEnum("Empty", Array.Empty<string>(), options),
+            };
+
+            var errors = Compile(sources);
+
+            Assert.That(errors, Is.Empty, string.Join("\n", errors));
+        }
+
+        [Test]
+        public void GeneratedCodeCompilesWhenNamespaceOrTypeIsNamedSystem()
+        {
+            var options = Options("Game.System");
+
+            var sources = new[]
+            {
+                CodeGenerator.GenerateRowClass("Units", Columns(UnitsHeader), options),
+                CodeGenerator.GenerateEnum("Rarity", RarityMembers, options),
+                CodeGenerator.GenerateEnum("System", new[] { "A" }, options),
             };
 
             var errors = Compile(sources);
