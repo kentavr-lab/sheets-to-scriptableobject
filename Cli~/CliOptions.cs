@@ -218,6 +218,12 @@ namespace Kentavr.SheetsToSO.Cli
                 || !NotAllowed("export", apiKeyVariable != null, "--api-key-env", out error)
                 || !Required("export", spreadsheetId, "--spreadsheet", out error))
                 return null;
+            if (!IsSpreadsheetId(spreadsheetId))
+            {
+                error = $"'--spreadsheet {spreadsheetId}': the id may contain only letters, digits, '_' and '-' " +
+                        "(the part between '/d/' and '/edit' in the spreadsheet URL)";
+                return null;
+            }
             if (sheets.Count == 0)
             {
                 error = "source export needs at least one '--sheet <name>=<gid>'";
@@ -281,6 +287,18 @@ namespace Kentavr.SheetsToSO.Cli
             var missing = string.IsNullOrWhiteSpace(value);
             error = missing ? $"source {source} needs '{key}'" : null;
             return !missing;
+        }
+
+        /// <summary>Same rule as <see cref="CsvExportSource.BuildExportUri"/>.</summary>
+        private static bool IsSpreadsheetId(string value)
+        {
+            foreach (var c in value)
+            {
+                var ok = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
+                if (!ok)
+                    return false;
+            }
+            return true;
         }
 
         private static bool IsDigits(string value)

@@ -62,6 +62,7 @@ namespace Kentavr.SheetsToSO.Cli.Tests
         [TestCase("--source", "export", "--spreadsheet", "abc", "--sheet", "Units=x1")]
         [TestCase("--source", "export", "--spreadsheet", "abc", "--sheet", "=1")]
         [TestCase("--source", "export", "--spreadsheet", "abc")]
+        [TestCase("--source", "export", "--spreadsheet", "a/b?c", "--sheet", "A=1")]
         [TestCase("--source", "export", "--spreadsheet", "abc", "--sheet", "A=1", "--api-key-env", "K")]
         [TestCase("--source", "csv", "--source", "csv", "--file", "a.csv")]
         public void InvalidArguments_ReturnError(params string[] args)

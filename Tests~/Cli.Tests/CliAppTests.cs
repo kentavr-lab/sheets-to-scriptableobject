@@ -228,6 +228,7 @@ namespace Kentavr.SheetsToSO.Cli.Tests
         [TestCase("--file", "a.csv")]
         [TestCase("--source", "export", "--spreadsheet", "abc", "--sheet", "Units")]
         [TestCase("--source", "api", "--spreadsheet", "abc", "--file", "a.csv")]
+        [TestCase("--source", "export", "--spreadsheet", "a/b", "--sheet", "A=1", "--sheet", "B=2")]
         public async Task InvalidArguments_ExitTwoWithUsage(params string[] args)
         {
             var run = await RunAsync(args);
