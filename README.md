@@ -17,7 +17,7 @@ Unity-пакет для импорта таблиц Google Sheets и CSV в ти
 https://github.com/kentavr-lab/sheets-to-scriptableobject.git
 ```
 
-Конкретная версия — с тегом:
+Конкретная версия — с тегом (теги появляются с релизами; тега `v0.1.0` пока нет, до релиза используйте URL без тега):
 
 ```
 https://github.com/kentavr-lab/sheets-to-scriptableobject.git#v0.1.0
@@ -28,10 +28,12 @@ https://github.com/kentavr-lab/sheets-to-scriptableobject.git#v0.1.0
 ```json
 {
   "dependencies": {
-    "com.kentavr-lab.sheets-to-scriptableobject": "https://github.com/kentavr-lab/sheets-to-scriptableobject.git#v0.1.0"
+    "com.kentavr-lab.sheets-to-scriptableobject": "https://github.com/kentavr-lab/sheets-to-scriptableobject.git"
   }
 }
 ```
+
+После релиза можно закрепить версию, дописав к URL `#v0.1.0`.
 
 **С диска.** Склонируйте репозиторий, затем *Package Manager → + → Add package from disk…* и выберите `package.json` в корне клона.
 
