@@ -136,3 +136,8 @@ crashlytics-build.properties
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# dotnet test projects for the Unity-free core
+!Tests~/**/*.csproj
+Tests~/**/bin/
+Tests~/**/obj/
