@@ -252,6 +252,24 @@ namespace Kentavr.SheetsToSO.Core.Tests
         }
 
         [Test]
+        public void InvalidIdColumnTypeSkipsIdChecks()
+        {
+            var result = Parse(
+                new[] { "id:floaty", "hp:int" },
+                new[] { "a b", "1" },
+                new[] { "a b", "x" });
+
+            Assert.That(result.IsValid, Is.False);
+            Assert.That(result.Columns.Select(c => c.Name), Is.EqualTo(new[] { "hp" }));
+            Assert.That(result.Errors.Select(e => e.Address), Is.EqualTo(new[] { "Units!A1", "Units!B3" }),
+                string.Join("; ", result.Errors));
+            Assert.That(result.Errors[0].HeaderCode, Is.EqualTo(HeaderErrorCode.UnknownType));
+            Assert.That(result.Errors[1].CellCode, Is.EqualTo(CellErrorCode.InvalidInt));
+            Assert.That(result.Rows, Has.Count.EqualTo(2));
+            Assert.That(result.Rows.All(r => r.Id == string.Empty), Is.True);
+        }
+
+        [Test]
         public void EmptySheetReportsMissingIdColumn()
         {
             var error = SingleError(Parse());
