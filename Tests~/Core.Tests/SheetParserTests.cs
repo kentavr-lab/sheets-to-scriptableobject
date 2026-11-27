@@ -318,5 +318,136 @@ namespace Kentavr.SheetsToSO.Core.Tests
             Assert.Throws<ArgumentNullException>(() => SheetParser.Parse("Units", null));
             Assert.Throws<ArgumentException>(() => SheetParser.Parse("Units", new IReadOnlyList<string>[] { new[] { "id" }, null }));
         }
+
+#pragma warning disable CS0649 // Fields are read through reflection only.
+        private class CodeRow
+        {
+            public string id;
+            public string name;
+            public int hp;
+            public float speed;
+            public bool stackable;
+            public Rarity rarity;
+            public string[] tags;
+            public List<int> levels;
+            public string weapon;
+            public int unused;
+        }
+#pragma warning restore CS0649
+
+        private static SheetParseResult ParseCode(params string[][] rows) =>
+            SheetParser.Parse("Units", Sheet(rows), typeof(CodeRow));
+
+        [Test]
+        public void CodeSchemaTakesTypesFromFields()
+        {
+            var result = ParseCode(
+                new[] { "id", "hp", "speed", "stackable", "rarity", "tags", "levels", "#notes" },
+                new[] { "sword_01", "120", "3.5", "TRUE", "Epic", "melee|starter", "1|2", "note" },
+                new[] { "axe_02", "", "", "", "", "", "", "" });
+
+            Assert.That(result.IsValid, Is.True, string.Join("; ", result.Errors));
+            Assert.That(result.Columns.Select(c => c.Type.ToString()),
+                Is.EqualTo(new[] { "string", "int", "float", "bool", "enum<Rarity>", "string[]", "int[]" }));
+
+            var sword = result.Rows[0].Values;
+            Assert.That(sword["hp"], Is.EqualTo(120));
+            Assert.That(sword["speed"], Is.EqualTo(3.5f));
+            Assert.That(sword["stackable"], Is.EqualTo(true));
+            Assert.That(sword["rarity"], Is.EqualTo("Epic"));
+            Assert.That(sword["tags"], Is.EqualTo(new[] { "melee", "starter" }));
+            Assert.That(sword["levels"], Is.EqualTo(new[] { 1, 2 }));
+            Assert.That(sword.ContainsKey("unused"), Is.False);
+
+            var axe = result.Rows[1].Values;
+            Assert.That(axe["hp"], Is.EqualTo(0));
+            Assert.That(axe["tags"], Is.EqualTo(Array.Empty<string>()));
+        }
+
+        [Test]
+        public void CodeSchemaAcceptsMatchingHeaderType()
+        {
+            var result = ParseCode(new[] { "id", "hp:int", "weapon:ref<Weapons>" }, new[] { "a", "1", "sword_01" });
+
+            Assert.That(result.IsValid, Is.True, string.Join("; ", result.Errors));
+            Assert.That(result.Columns[2].Type.ToString(), Is.EqualTo("ref<Weapons>"));
+            Assert.That(result.Rows[0].Values["weapon"], Is.EqualTo("sword_01"));
+        }
+
+        [Test]
+        public void CodeSchemaTypeMismatchHasHeaderAddress()
+        {
+            var result = ParseCode(new[] { "id", "hp:float" }, new[] { "a", "1.5" });
+
+            var error = SingleError(result);
+            Assert.That(error.HeaderCode, Is.EqualTo(HeaderErrorCode.TypeMismatch));
+            Assert.That(error.Address, Is.EqualTo("Units!B1"));
+            Assert.That(error.Message, Does.Contain("'hp'").And.Contain("'float'").And.Contain("'int'"));
+            Assert.That(result.Columns.Select(c => c.Name), Is.EqualTo(new[] { "id" }));
+        }
+
+        [Test]
+        public void CodeSchemaUnknownFieldHasHeaderAddress()
+        {
+            var result = ParseCode(new[] { "id", "armor" }, new[] { "a", "1" });
+
+            var error = SingleError(result);
+            Assert.That(error.HeaderCode, Is.EqualTo(HeaderErrorCode.UnknownField));
+            Assert.That(error.Address, Is.EqualTo("Units!B1"));
+        }
+
+        [Test]
+        public void CodeSchemaErrorsFollowHeaderErrors()
+        {
+            var result = ParseCode(new[] { "id", "hp:float", "bad name" }, new[] { "a", "1", "x" });
+
+            Assert.That(result.Errors.Select(e => e.HeaderCode),
+                Is.EqualTo(new HeaderErrorCode?[] { HeaderErrorCode.InvalidName, HeaderErrorCode.TypeMismatch }));
+            Assert.That(result.Errors.Select(e => e.Address), Is.EqualTo(new[] { "Units!C1", "Units!B1" }));
+        }
+
+        [Test]
+        public void CodeSchemaRequiredColumnFromHeader()
+        {
+            var result = ParseCode(new[] { "id", "name:string!" }, new[] { "a", "" });
+
+            var error = SingleError(result);
+            Assert.That(error.CellCode, Is.EqualTo(CellErrorCode.RequiredEmpty));
+            Assert.That(error.Address, Is.EqualTo("Units!B2"));
+        }
+
+        [Test]
+        public void CodeSchemaParsesCellsByFieldType()
+        {
+            var result = ParseCode(new[] { "id", "hp" }, new[] { "a", "abc" });
+
+            var error = SingleError(result);
+            Assert.That(error.CellCode, Is.EqualTo(CellErrorCode.InvalidInt));
+            Assert.That(error.Address, Is.EqualTo("Units!B2"));
+        }
+
+        [Test]
+        public void CodeSchemaKeepsIdChecks()
+        {
+            var result = ParseCode(new[] { "id", "hp" }, new[] { "a", "1" }, new[] { "a", "2" });
+
+            Assert.That(SingleError(result).CellCode, Is.EqualTo(CellErrorCode.DuplicateId));
+        }
+
+        [Test]
+        public void HeaderWithoutTypesStaysStringWithoutRowType()
+        {
+            var result = ParseValid(new[] { "id", "hp" }, new[] { "a", "abc" });
+
+            Assert.That(result.Columns[1].Type.ToString(), Is.EqualTo("string"));
+            Assert.That(result.Rows[0].Values["hp"], Is.EqualTo("abc"));
+        }
+
+        [Test]
+        public void CodeSchemaNullRowTypeThrows()
+        {
+            Assert.Throws<ArgumentNullException>(() => SheetParser.Parse("Units", Sheet(new[] { "id" }), null));
+            Assert.Throws<ArgumentNullException>(() => SheetParser.Parse("Units", null, typeof(CodeRow)));
+        }
     }
 }
