@@ -10,7 +10,9 @@ namespace Kentavr.SheetsToSO.Core
         /// <param name="namespace">Namespace of the generated code, e.g. <c>My.Game.Data</c>.</param>
         /// <param name="rowClassTemplate">Row class template text; <c>null</c> uses <see cref="CodeTemplates.DefaultRowClass"/>.</param>
         /// <param name="enumTemplate">Enum template text; <c>null</c> uses <see cref="CodeTemplates.DefaultEnum"/>.</param>
-        public CodeGenOptions(string @namespace, string rowClassTemplate = null, string enumTemplate = null)
+        /// <param name="tableClassTemplate">Table class template text; <c>null</c> uses <see cref="CodeTemplates.DefaultTableClass"/>.</param>
+        public CodeGenOptions(string @namespace, string rowClassTemplate = null, string enumTemplate = null,
+            string tableClassTemplate = null)
         {
             if (@namespace == null)
                 throw new ArgumentNullException(nameof(@namespace));
@@ -22,6 +24,7 @@ namespace Kentavr.SheetsToSO.Core
             Namespace = @namespace;
             RowClassTemplate = rowClassTemplate ?? CodeTemplates.DefaultRowClass;
             EnumTemplate = enumTemplate ?? CodeTemplates.DefaultEnum;
+            TableClassTemplate = tableClassTemplate ?? CodeTemplates.DefaultTableClass;
         }
 
         /// <summary>Namespace of the generated code.</summary>
@@ -32,6 +35,9 @@ namespace Kentavr.SheetsToSO.Core
 
         /// <summary>Enum template text.</summary>
         public string EnumTemplate { get; }
+
+        /// <summary>Table class template text.</summary>
+        public string TableClassTemplate { get; }
 
         private static bool IsValidNamespace(string value)
         {
