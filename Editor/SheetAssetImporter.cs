@@ -19,18 +19,63 @@ namespace Kentavr.SheetsToSO.Editor
         /// <summary>Request saved before a script reload; read and deleted after it.</summary>
         internal const string PendingImportPath = "Library/Kentavr.SheetsToSO/pending-import.json";
 
+        /// <summary>Raw sheets of the last applied import, one file per asset folder; the "before" side of the diff.</summary>
+        internal const string SnapshotFolder = "Library/Kentavr.SheetsToSO/snapshots";
+
         private const string LogPrefix = "Sheets to SO: ";
         private const string TableSuffix = "Table";
         private const string AssetsRoot = "Assets";
 
         private static readonly UTF8Encoding Utf8NoBom = new UTF8Encoding(false);
 
+        /// <summary>Raised with the report of an import that continued after a script reload.</summary>
+        internal static event Action<SheetImportReport> ImportContinued;
+
         private sealed class PreparedImport
         {
             public SheetImportRequest Request;
             public CodeGenOptions Options;
-            public List<SheetParseResult> Sheets = new List<SheetParseResult>();
-            public EnumMembersResult Enums;
+            public SheetSetCheckResult Checked;
+            public IReadOnlyList<SheetParseResult> Sheets => Checked.Sheets;
+            public EnumMembersResult Enums => Checked.Enums;
+        }
+
+        [Serializable]
+        private sealed class Snapshot
+        {
+            public List<SheetImportSheet> sheets = new List<SheetImportSheet>();
+        }
+
+        /// <summary>
+        /// Checks the request as <see cref="Import"/> would, without writing anything, and builds the diff
+        /// with the last import applied to the same asset folder on this machine.
+        /// </summary>
+        public static SheetImportCheck Check(SheetImportRequest request)
+        {
+            if (request == null)
+                throw new ArgumentNullException(nameof(request));
+
+            var check = new SheetImportCheck();
+            var prepared = Prepare(request, check.Errors);
+            if (check.HasErrors)
+                return check;
+
+            List<SheetImportSheet> previous;
+            try
+            {
+                previous = ReadSnapshot(prepared.Request.assetFolder);
+            }
+            catch (Exception e)
+            {
+                check.DiffText = SheetSetChecker.PreviousUnreadableText +
+                    $": {SnapshotPath(prepared.Request.assetFolder)}: {e.Message}";
+                return check;
+            }
+
+            var diff = SheetSetChecker.Diff(ToCheckInput(previous), prepared.Checked);
+            check.DiffText = diff.Text;
+            check.HasRemovals = diff.HasRemovals;
+            return check;
         }
 
         /// <summary>
@@ -48,7 +93,7 @@ namespace Kentavr.SheetsToSO.Editor
             DeletePending();
 
             var report = new SheetImportReport();
-            var prepared = Prepare(request, report);
+            var prepared = Prepare(request, report.Errors);
             if (report.HasErrors)
             {
                 Log(report);
@@ -109,20 +154,21 @@ namespace Kentavr.SheetsToSO.Editor
         private static void ContinueAfterReload(SheetImportRequest request)
         {
             var report = new SheetImportReport();
-            var prepared = Prepare(request, report);
+            var prepared = Prepare(request, report.Errors);
             if (!report.HasErrors && TryFindTableTypes(prepared, report, true, out var tableTypes))
                 ApplyAssets(prepared, tableTypes, report);
             Log(report);
+            ImportContinued?.Invoke(report);
         }
 
-        private static PreparedImport Prepare(SheetImportRequest request, SheetImportReport report)
+        private static PreparedImport Prepare(SheetImportRequest request, List<string> errors)
         {
             var prepared = new PreparedImport
             {
                 Request = new SheetImportRequest
                 {
-                    assetFolder = NormalizeFolder(request.assetFolder, "Asset folder", report),
-                    codeFolder = NormalizeFolder(request.codeFolder, "Code folder", report),
+                    assetFolder = NormalizeFolder(request.assetFolder, "Asset folder", errors),
+                    codeFolder = NormalizeFolder(request.codeFolder, "Code folder", errors),
                     @namespace = request.@namespace,
                     sheets = request.sheets ?? new List<SheetImportSheet>(),
                 },
@@ -134,78 +180,31 @@ namespace Kentavr.SheetsToSO.Editor
             }
             catch (ArgumentException e)
             {
-                report.Errors.Add(e.Message);
+                errors.Add(e.Message);
             }
 
-            if (prepared.Request.sheets.Count == 0)
-                report.Errors.Add("No sheets to import");
-
-            // Ignore case: each sheet becomes files, and file names are case-insensitive on Windows and macOS.
-            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var source in prepared.Request.sheets)
-            {
-                if (source == null || string.IsNullOrEmpty(source.name))
-                {
-                    report.Errors.Add("Sheet without a name");
-                    continue;
-                }
-                if (!names.Add(source.name))
-                {
-                    report.Errors.Add($"Duplicate sheet name '{source.name}'");
-                    continue;
-                }
-
-                var rows = (source.rows ?? new List<SheetImportRow>())
-                    .Select(row => (IReadOnlyList<string>)(row?.cells ?? new List<string>()))
-                    .ToList();
-                var sheet = SheetParser.Parse(source.name, rows);
-                foreach (var error in sheet.Errors)
-                    report.Errors.Add(error.ToString());
-
-                if (sheet.Columns.Count > 0)
-                {
-                    var id = sheet.Columns[0];
-                    if (id.Type.Kind != ColumnKind.String || id.Type.IsArray)
-                        report.Errors.Add($"{sheet.SheetName}!{id.Address}: column 'id' must be of type 'string', found '{id.Type}'");
-                }
-
-                prepared.Sheets.Add(sheet);
-            }
-
-            if (report.HasErrors)
-                return prepared;
-
-            prepared.Enums = CodeGenerator.CollectEnumMembers(prepared.Sheets);
-            foreach (var error in prepared.Enums.Errors)
-                report.Errors.Add(error.ToString());
-
-            // Row classes, table classes and enums share one namespace and one code folder (one file per type,
-            // so names are compared ignoring case).
-            var typeOwners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var sheet in prepared.Sheets)
-            {
-                AddTypeName(typeOwners, sheet.SheetName, $"row class of sheet '{sheet.SheetName}'", report);
-                AddTypeName(typeOwners, sheet.SheetName + TableSuffix, $"table class of sheet '{sheet.SheetName}'", report);
-            }
-            foreach (var enumName in prepared.Enums.EnumNames)
-                AddTypeName(typeOwners, enumName, $"enum '{enumName}'", report);
-
+            prepared.Checked = SheetSetChecker.Check(ToCheckInput(prepared.Request.sheets));
+            errors.AddRange(prepared.Checked.Errors);
             return prepared;
         }
 
-        private static void AddTypeName(Dictionary<string, string> owners, string name, string owner, SheetImportReport report)
+        private static IReadOnlyList<(string Name, IReadOnlyList<IReadOnlyList<string>> Rows)> ToCheckInput(
+            List<SheetImportSheet> sheets)
         {
-            if (owners.TryGetValue(name, out var other))
-                report.Errors.Add($"Type name '{name}' is used by both the {other} and the {owner}");
-            else
-                owners.Add(name, owner);
+            return sheets
+                .Select(sheet => (
+                    sheet?.name,
+                    (IReadOnlyList<IReadOnlyList<string>>)(sheet?.rows ?? new List<SheetImportRow>())
+                        .Select(row => (IReadOnlyList<string>)(row?.cells ?? new List<string>()))
+                        .ToList()))
+                .ToList();
         }
 
-        private static string NormalizeFolder(string folder, string what, SheetImportReport report)
+        private static string NormalizeFolder(string folder, string what, List<string> errors)
         {
             if (string.IsNullOrWhiteSpace(folder))
             {
-                report.Errors.Add($"{what} is not set");
+                errors.Add($"{what} is not set");
                 return folder;
             }
 
@@ -213,7 +212,7 @@ namespace Kentavr.SheetsToSO.Editor
             var parts = path.Split('/');
             var valid = parts[0] == AssetsRoot && parts.All(part => part.Length > 0 && part != "." && part != "..");
             if (!valid)
-                report.Errors.Add($"{what} '{folder}' must be inside '{AssetsRoot}/'");
+                errors.Add($"{what} '{folder}' must be inside '{AssetsRoot}/'");
             return path;
         }
 
@@ -357,6 +356,38 @@ namespace Kentavr.SheetsToSO.Editor
 
             AssetDatabase.SaveAssets();
             FindAssetsWithoutSheet(prepared, report);
+
+            if (!report.HasErrors)
+                SaveSnapshot(prepared.Request);
+        }
+
+        private static string SnapshotPath(string assetFolder) =>
+            $"{SnapshotFolder}/{assetFolder.Replace('/', '_')}.json";
+
+        // Sheets of the last import applied to the folder; empty when there was none.
+        private static List<SheetImportSheet> ReadSnapshot(string assetFolder)
+        {
+            var path = SnapshotPath(assetFolder);
+            if (!File.Exists(path))
+                return new List<SheetImportSheet>();
+
+            var snapshot = JsonUtility.FromJson<Snapshot>(File.ReadAllText(path, Utf8NoBom));
+            return snapshot?.sheets ?? new List<SheetImportSheet>();
+        }
+
+        private static void SaveSnapshot(SheetImportRequest request)
+        {
+            var path = SnapshotPath(request.assetFolder);
+            try
+            {
+                Directory.CreateDirectory(SnapshotFolder);
+                File.WriteAllText(path, JsonUtility.ToJson(new Snapshot { sheets = request.sheets }), Utf8NoBom);
+            }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
+            {
+                // Assets are already updated; only the next diff is affected.
+                Debug.LogWarning(LogPrefix + $"cannot save the import snapshot '{path}': {e.Message}");
+            }
         }
 
         // Table assets directly in the asset folder (subfolders excluded) whose name matches no sheet.
