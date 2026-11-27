@@ -71,6 +71,43 @@ if (unitsTable.TryGet("knight", out var knight))
 
 Строки без `id` в поиск не попадают; при повторе `id` используется первая строка. Об обоих случаях пишется ошибка в консоль со ссылкой на ассет.
 
+## Консольная проверка (CI)
+
+Приложение `Cli~/` загружает вкладки, разбирает их и проверяет ссылки и enum тем же кодом ядра, что и редактор, и печатает отчёт в консоль. Нужен .NET SDK 8.0 или новее. Из корня репозитория:
+
+```
+dotnet run --project "Cli~" -- --source csv --file Units.csv
+```
+
+Три источника:
+
+```
+# CSV/TSV-файлы: одна вкладка = один файл, имя вкладки — имя файла без расширения; .tsv — с табуляцией
+dotnet run --project "Cli~" -- --source csv --file Data/Units.csv --file Data/Weapons.tsv
+
+# Google Sheets API: без --sheet проверяются все вкладки, кроме начинающихся с #
+dotnet run --project "Cli~" -- --source api --spreadsheet <ID> [--sheet Units --sheet Weapons]
+
+# Экспорт CSV по ссылке: у ссылки нет имени вкладки, поэтому вкладка задаётся как имя=gid
+dotnet run --project "Cli~" -- --source export --spreadsheet <ID> --sheet Units=0 --sheet Weapons=123456789
+```
+
+API-ключ для `--source api` берётся из переменной окружения `SHEETS_TO_SO_API_KEY` (другое имя — `--api-key-env <ИМЯ>`). В аргументах ключ не принимается и в вывод не попадает. Справка — `--help`.
+
+Отчёт — по строке на проблему, в конце итог:
+
+```
+error: Units!C2: Column 'hp': 'abc' is not a valid int
+error: Units!D2: Column 'weapon': 'axe': no row with this id in sheet 'Weapons'
+Sheets: 2, errors: 2, warnings: 0
+```
+
+| Код выхода | Значение |
+|---|---|
+| `0` | Ошибок нет (предупреждения, например о `,` в числах, на код не влияют). |
+| `1` | Ошибки данных: заголовок, ячейки, `id`, синтаксис CSV, `ref`/`enum`. |
+| `2` | Ошибки аргументов или доступа: неизвестный ключ, нет файла, не задан ключ API, ответ 403, HTML вместо CSV. Сообщение — в stderr, разбор не выполняется. |
+
 ## Документация
 
 - [Формат данных](Documentation~/data-format.md) — источники, правила таблицы, типы, что считается ошибкой.
@@ -83,7 +120,9 @@ if (unitsTable.TryGet("knight", out var knight))
 | `Kentavr.SheetsToSO` | `Runtime/` | Рантайм: базовый ScriptableObject таблицы с поиском по `id`. |
 | `Kentavr.SheetsToSO.Editor` | `Editor/` | Только редактор: окно импорта, кодогенерация, хранение API-ключа. |
 
-Папки `Documentation~/` и `Tests~/` Unity не импортирует.
+| — | `Cli~/` | Консольное приложение `sheets-to-so` для CI: проверка вкладок с кодом выхода. Ссылается на ядро через `Tests~/Core`, в пакет для Unity не попадает. |
+
+Папки `Cli~/`, `Documentation~/` и `Tests~/` Unity не импортирует.
 
 ## Тесты
 
@@ -91,6 +130,7 @@ if (unitsTable.TryGet("knight", out var knight))
 
 ```
 dotnet test "Tests~/Core.Tests"
+dotnet test "Tests~/Cli.Tests"
 ```
 
 Нужен .NET SDK 8.0 или новее.
