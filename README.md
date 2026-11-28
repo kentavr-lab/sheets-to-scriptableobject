@@ -2,8 +2,6 @@
 
 Unity-пакет для импорта таблиц Google Sheets и CSV в типизированные ScriptableObject-конфиги. Типы столбцов задаются в заголовке таблицы (тогда классы генерируются) или в вашем коде. Перед импортом данные проверяются, а изменения показываются в виде diff — применяются только после подтверждения.
 
-> **Статус: каркас (0.1.0).** Структура пакета и сборки готовы, логики импорта пока нет. Формат данных утверждён — см. [Documentation~/data-format.md](Documentation~/data-format.md).
-
 ## Требования
 
 - Unity 2022.3 LTS или новее.
@@ -17,10 +15,10 @@ Unity-пакет для импорта таблиц Google Sheets и CSV в ти
 https://github.com/kentavr-lab/sheets-to-scriptableobject.git
 ```
 
-Конкретная версия — с тегом (теги появляются с релизами; тега `v0.1.0` пока нет, до релиза используйте URL без тега):
+Конкретная версия — с тегом:
 
 ```
-https://github.com/kentavr-lab/sheets-to-scriptableobject.git#v0.1.0
+https://github.com/kentavr-lab/sheets-to-scriptableobject.git#v0.3.0
 ```
 
 **Через `Packages/manifest.json`.** Добавьте строку в `dependencies`:
@@ -33,7 +31,7 @@ https://github.com/kentavr-lab/sheets-to-scriptableobject.git#v0.1.0
 }
 ```
 
-После релиза можно закрепить версию, дописав к URL `#v0.1.0`.
+Чтобы закрепить версию, допишите к URL `#v0.3.0`.
 
 **С диска.** Склонируйте репозиторий, затем *Package Manager → + → Add package from disk…* и выберите `package.json` в корне клона.
 
