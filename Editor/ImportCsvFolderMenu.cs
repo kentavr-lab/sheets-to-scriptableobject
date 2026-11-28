@@ -47,6 +47,9 @@ namespace Kentavr.SheetsToSO.Editor
         private static int menuRetries;
         private static double menuRetryStart = -1;
 
+        // The English [MenuItem] item has been seen in the menu since the domain was loaded.
+        private static bool menuBuilt;
+
         static ImportCsvFolderMenu()
         {
             EditorLocale.Changed += UpdateMenuItem;
@@ -66,10 +69,20 @@ namespace Kentavr.SheetsToSO.Editor
             if (menuRetryStart < 0)
                 menuRetryStart = EditorApplication.timeSinceStartup;
 
-            UpdateMenuItem();
+            // Until the [MenuItem] item shows up, Unity has not built the menu yet: a change now would be lost on the
+            // rebuild, and "translated item present, English absent" would be a false success.
+            if (!menuBuilt)
+                menuBuilt = MenuItemExistsMethod == null || InMenu(MenuPath);
+
+            var done = false;
+            if (menuBuilt)
+            {
+                UpdateMenuItem();
+                done = IsMenuOnWantedLanguage();
+            }
             menuRetries++;
 
-            if (IsMenuOnWantedLanguage() || menuRetries >= MaxMenuRetries
+            if (done || menuRetries >= MaxMenuRetries
                 || EditorApplication.timeSinceStartup - menuRetryStart >= MenuRetrySeconds)
                 EditorApplication.update -= RetryMenuUpdate;
         }
