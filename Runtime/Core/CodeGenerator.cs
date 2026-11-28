@@ -356,22 +356,129 @@ namespace Kentavr.SheetsToSO.Core
         }
 
         /// <summary>
-        /// Generates the table class of a sheet: a <c>SheetTable&lt;&gt;</c> of the row class,
-        /// plus the <c>ISheetRow</c> part of the row class (the row class must have a string field <c>id</c>).
+        /// Generates the table class of a sheet without <c>ref&lt;X&gt;</c> properties; same as
+        /// <see cref="GenerateTableClass(string, string, IReadOnlyList{ColumnDefinition}, CodeGenOptions)"/> with no columns.
         /// </summary>
         public static string GenerateTableClass(string tableClassName, string rowClassName, CodeGenOptions options)
         {
+            return GenerateTableClass(tableClassName, rowClassName, Array.Empty<ColumnDefinition>(), options);
+        }
+
+        /// <summary>
+        /// Generates the table class of a sheet: a <c>SheetTable&lt;&gt;</c> of the row class,
+        /// plus the <c>ISheetRow</c> part of the row class (the row class must have a string field <c>id</c>)
+        /// with one property per <c>ref&lt;X&gt;</c> column (see <see cref="RefPropertyName"/>), in column order.
+        /// The table class of sheet <c>X</c> is assumed to be <c>X</c> + <see cref="TableSuffix"/> in the same namespace.
+        /// </summary>
+        /// <exception cref="ArgumentException">A name is invalid, or a property name conflicts (see <see cref="FindRefPropertyConflict"/>).</exception>
+        public static string GenerateTableClass(string tableClassName, string rowClassName,
+            IReadOnlyList<ColumnDefinition> columns, CodeGenOptions options)
+        {
             ValidateName(tableClassName, nameof(tableClassName), "table class name");
             ValidateName(rowClassName, nameof(rowClassName), "row class name");
+            if (columns == null)
+                throw new ArgumentNullException(nameof(columns));
             if (options == null)
                 throw new ArgumentNullException(nameof(options));
             if (tableClassName == rowClassName)
                 throw new ArgumentException(
                     $"Table class name '{tableClassName}' must differ from the row class name", nameof(tableClassName));
 
+            for (var i = 0; i < columns.Count; i++)
+            {
+                if (columns[i] == null)
+                    throw new ArgumentException($"Column at index {i} is null", nameof(columns));
+            }
+
+            var properties = new StringBuilder();
+            foreach (var column in columns)
+            {
+                if (column.Type.Kind != ColumnKind.Ref)
+                    continue;
+
+                var conflict = FindRefPropertyConflict(column, columns, rowClassName);
+                if (conflict != null)
+                    throw new ArgumentException($"Column '{column.Name}': {conflict}", nameof(columns));
+
+                AppendRefProperty(properties, column, options.Namespace);
+            }
+
             return Render(options.TableClassTemplate, options.Namespace,
                 CodeTemplates.TableClassNamePlaceholder, tableClassName,
-                CodeTemplates.RowClassNamePlaceholder, rowClassName);
+                CodeTemplates.RowClassNamePlaceholder, rowClassName,
+                CodeTemplates.RefPropertiesPlaceholder, properties.ToString());
+        }
+
+        /// <summary>Suffix of the table class name: sheet <c>Units</c> → <c>UnitsTable</c>.</summary>
+        public const string TableSuffix = "Table";
+
+        /// <summary>Private field of the generated row class that holds its table.</summary>
+        internal const string TableFieldName = "__table";
+
+        /// <summary>
+        /// Name of the property generated for a <c>ref&lt;X&gt;</c> column: the column name with its first letter
+        /// in upper case (<c>weapon</c> → <c>Weapon</c>, <c>dropItems</c> → <c>DropItems</c>).
+        /// </summary>
+        public static string RefPropertyName(string columnName)
+        {
+            if (columnName == null)
+                throw new ArgumentNullException(nameof(columnName));
+            if (columnName.Length == 0)
+                return columnName;
+            return char.ToUpperInvariant(columnName[0]) + columnName.Substring(1);
+        }
+
+        /// <summary>
+        /// Why the property of a <c>ref&lt;X&gt;</c> column cannot be generated, or <c>null</c> when it can.
+        /// The property name must differ from every column name of the sheet (its own column included),
+        /// from the row class name and from the private field <c>__table</c>.
+        /// </summary>
+        internal static string FindRefPropertyConflict(ColumnDefinition column, IReadOnlyList<ColumnDefinition> columns,
+            string rowClassName)
+        {
+            var property = RefPropertyName(column.Name);
+            var subject = $"property '{property}' generated for {column.Type}";
+
+            foreach (var other in columns)
+            {
+                if (other != null && other.Name == property)
+                    return $"{subject} has the same name as column '{other.Name}'; rename one of the columns";
+            }
+
+            if (property == rowClassName)
+                return $"{subject} has the same name as the row class '{rowClassName}'; rename the column";
+            if (property == TableFieldName)
+                return $"{subject} has the same name as the generated field '{TableFieldName}'; rename the column";
+            return null;
+        }
+
+        private static void AppendRefProperty(StringBuilder text, ColumnDefinition column, string @namespace)
+        {
+            var type = column.Type;
+            var rowType = "global::" + @namespace + "." + type.TypeName;
+            var tableType = rowType + TableSuffix;
+
+            text.Append("\n\n").Append(MemberIndent).Append("// ").Append(type);
+            if (type.IsArray)
+            {
+                text.Append(": rows of sheet ").Append(type.TypeName).Append(" by '").Append(column.Name)
+                    .Append("'; null items for empty or not found ids, null if the table is not linked\n")
+                    .Append(MemberIndent)
+                    .Append("public global::System.Collections.Generic.IReadOnlyList<").Append(rowType).Append("> ")
+                    .Append(RefPropertyName(column.Name))
+                    .Append(" => global::Kentavr.SheetsToSO.SheetRefs.GetMany<");
+            }
+            else
+            {
+                text.Append(": row of sheet ").Append(type.TypeName).Append(" by '").Append(column.Name)
+                    .Append("'; null if empty, not found or the table is not linked\n")
+                    .Append(MemberIndent)
+                    .Append("public ").Append(rowType).Append(' ').Append(RefPropertyName(column.Name))
+                    .Append(" => global::Kentavr.SheetsToSO.SheetRefs.Get<");
+            }
+
+            text.Append(tableType).Append(", ").Append(rowType).Append(">(")
+                .Append(TableFieldName).Append(", ").Append(column.Name).Append(");");
         }
 
         /// <summary>
@@ -489,17 +596,17 @@ namespace Kentavr.SheetsToSO.Core
                 throw new ArgumentException($"The {what} '{value}' is a reserved C# keyword", paramName);
         }
 
-        private static string Render(string template, string @namespace,
-            string namePlaceholder, string name, string bodyPlaceholder, string body)
+        private static string Render(string template, string @namespace, params string[] placeholdersAndValues)
         {
             // Templates may come from files with CRLF endings; output is always '\n'.
-            return template
+            var text = template
                 .Replace("\r\n", "\n")
                 .Replace('\r', '\n')
                 .Replace(CodeTemplates.HeaderPlaceholder, Header)
-                .Replace(CodeTemplates.NamespacePlaceholder, @namespace)
-                .Replace(namePlaceholder, name)
-                .Replace(bodyPlaceholder, body);
+                .Replace(CodeTemplates.NamespacePlaceholder, @namespace);
+            for (var i = 0; i < placeholdersAndValues.Length; i += 2)
+                text = text.Replace(placeholdersAndValues[i], placeholdersAndValues[i + 1]);
+            return text;
         }
     }
 }

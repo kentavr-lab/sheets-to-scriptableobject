@@ -255,6 +255,46 @@ namespace Kentavr.SheetsToSO.Core.Tests
         }
 
         [Test]
+        public void RefPropertyConflictIsAnErrorAtHeader()
+        {
+            var result = SheetSetChecker.Check(Set(
+                Sheet("Units", new[] { "id", "name", "hp:int", "rarity:enum<Rarity>", "Weapon:ref<Weapons>" },
+                    new[] { "knight", "Knight", "1", "Epic", "w_01" }),
+                Weapons()));
+
+            Assert.That(result.Errors, Is.EqualTo(new[]
+            {
+                "Units!E1: Column 'Weapon': property 'Weapon' generated for ref<Weapons> has the same name as column 'Weapon'; " +
+                "rename one of the columns",
+            }));
+            Assert.That(result.Enums.EnumNames, Is.Empty);
+        }
+
+        [Test]
+        public void RefPropertyEqualToRowClassIsAnError()
+        {
+            var result = SheetSetChecker.Check(Set(
+                Sheet("Units", new[] { "id", "units:ref<Units>[]" }, new[] { "knight", "" }),
+                Weapons()));
+
+            Assert.That(result.Errors, Is.EqualTo(new[]
+            {
+                "Units!B1: Column 'units': property 'Units' generated for ref<Units>[] has the same name as the row class 'Units'; " +
+                "rename the column",
+            }));
+        }
+
+        [Test]
+        public void RefColumnsWithoutConflictsAreValid()
+        {
+            Valid(
+                Sheet("Units", new[] { "id", "weapon:ref<Weapons>", "weapons:ref<Weapons>[]", "leader:ref<Units>" },
+                    new[] { "knight", "w_01", "w_01|w_02", "" },
+                    new[] { "squire", "", "", "knight" }),
+                Weapons());
+        }
+
+        [Test]
         public void EnumNameConflictsWithSheet()
         {
             var result = SheetSetChecker.Check(Set(
