@@ -19,21 +19,31 @@ namespace Kentavr.SheetsToSO.Editor
         private const string MenuPath = "Window/Sheets to SO/Import";
         private const string Title = "Sheets to SO";
 
-        private const string GenerateCodeLabel = "Генерировать код";
         private const float TableTypeWidth = 200;
+        private const float LanguageWidth = 70;
 
         private static readonly string[] MonoFonts = { "Consolas", "Menlo", "DejaVu Sans Mono", "Courier New" };
 
+        private static readonly SheetSourceKind[] SourceKinds =
+            { SheetSourceKind.GoogleApi, SheetSourceKind.Export, SheetSourceKind.CsvFiles };
+
+        private static readonly TextKey[] SourceLabels =
+            { TextKey.SourceGoogleApi, TextKey.SourceExport, TextKey.SourceCsvFiles };
+
+        private static readonly string[] LanguageCodes =
+            EditorText.Languages.Select(language => language.Code.ToUpperInvariant()).ToArray();
+
         private SheetSourceLoader _loader;
         private CancellationTokenSource _cancel;
-        private string _busyText;
+        private TextKey? _busyText;
         private string _apiKey = string.Empty;
 
         // Last check; cleared by any change of the settings or check boxes. Not kept over a script reload.
         private SheetImportRequest _checkedRequest;
         private SheetLoadResult _loaded;
         private SheetImportCheck _check;
-        private string _sourceMessage;
+        // Built on each draw, so messages of the window follow the language switch.
+        private Func<string> _sourceMessage;
 
         // Last import result; kept over the script reload that follows a code change.
         [SerializeField] private string _importText;
@@ -82,11 +92,17 @@ namespace Kentavr.SheetsToSO.Editor
         {
             var settings = SheetImportSettings.instance;
 
+            EditorGUI.BeginChangeCheck();
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                using (new EditorGUI.DisabledScope(IsBusy))
+                    DrawSource(settings);
+                DrawLanguage();
+            }
+
             using (new EditorGUI.DisabledScope(IsBusy))
             {
-                EditorGUI.BeginChangeCheck();
-
-                settings.source = (SheetSourceKind)EditorGUILayout.EnumPopup("Источник", settings.source);
                 EditorGUILayout.Space();
 
                 switch (settings.source)
@@ -103,13 +119,13 @@ namespace Kentavr.SheetsToSO.Editor
                 }
 
                 EditorGUILayout.Space();
-                settings.assetFolder = EditorGUILayout.TextField("Папка ассетов", settings.assetFolder);
-                settings.codeFolder = EditorGUILayout.TextField("Папка кода", settings.codeFolder);
+                settings.assetFolder = EditorGUILayout.TextField(L.T(TextKey.AssetsFolder), settings.assetFolder);
+                settings.codeFolder = EditorGUILayout.TextField(L.T(TextKey.CodeFolder), settings.codeFolder);
                 settings.@namespace = EditorGUILayout.TextField("Namespace", settings.@namespace);
-
-                if (EditorGUI.EndChangeCheck())
-                    OnSettingsChanged();
             }
+
+            if (EditorGUI.EndChangeCheck())
+                OnSettingsChanged();
 
             EditorGUILayout.Space();
             DrawButtons();
@@ -117,20 +133,55 @@ namespace Kentavr.SheetsToSO.Editor
             DrawReport();
         }
 
+        private static void DrawSource(SheetImportSettings settings)
+        {
+            var labels = SourceLabels.Select(key => L.T(key)).ToArray();
+            var index = Array.IndexOf(SourceKinds, settings.source);
+            var selected = EditorGUILayout.Popup(L.T(TextKey.Source), index, labels);
+            if (selected >= 0 && selected != index)
+                settings.source = SourceKinds[selected];
+        }
+
+        // EN | RU switch. Enabled while loading; it is not a setting, so it neither resets the check nor the import result.
+        private void DrawLanguage()
+        {
+            var changed = GUI.changed;
+            var index = Math.Max(0, IndexOf(EditorText.Languages, EditorLocale.Current));
+            var selected = GUILayout.Toolbar(index, LanguageCodes, EditorStyles.miniButton, GUILayout.Width(LanguageWidth));
+            GUI.changed = changed;
+
+            if (selected != index)
+            {
+                EditorLocale.Set(EditorText.Languages[selected]);
+                Repaint();
+            }
+        }
+
+        private static int IndexOf(IReadOnlyList<EditorLanguage> languages, EditorLanguage language)
+        {
+            for (var i = 0; i < languages.Count; i++)
+            {
+                if (languages[i] == language)
+                    return i;
+            }
+
+            return -1;
+        }
+
         private void DrawGoogle(SheetImportSettings settings)
         {
-            settings.spreadsheetId = EditorGUILayout.TextField("ID таблицы", settings.spreadsheetId);
+            settings.spreadsheetId = EditorGUILayout.TextField(L.T(TextKey.SpreadsheetId), settings.spreadsheetId);
 
             using (new EditorGUILayout.HorizontalScope())
             {
                 EditorGUI.BeginChangeCheck();
-                var key = EditorGUILayout.PasswordField("Ключ API", _apiKey);
+                var key = EditorGUILayout.PasswordField(L.T(TextKey.ApiKey), _apiKey);
                 if (EditorGUI.EndChangeCheck())
                 {
                     _apiKey = key;
                     ApiKeyStore.Save(key);
                 }
-                if (GUILayout.Button("Очистить", GUILayout.Width(80)))
+                if (GUILayout.Button(L.T(TextKey.Clear), GUILayout.Width(80)))
                 {
                     _apiKey = string.Empty;
                     ApiKeyStore.Save(string.Empty);
@@ -138,20 +189,18 @@ namespace Kentavr.SheetsToSO.Editor
                     OnSettingsChanged();
                 }
             }
-            EditorGUILayout.LabelField(" ", "Ключ хранится в настройках редактора (EditorPrefs), не в проекте.",
-                EditorStyles.miniLabel);
+            EditorGUILayout.LabelField(" ", L.T(TextKey.ApiKeyHint), EditorStyles.miniLabel);
 
-            if (GUILayout.Button("Обновить список вкладок"))
+            if (GUILayout.Button(L.T(TextKey.RefreshSheetList)))
                 RefreshGoogleSheets(settings);
 
-            DrawToggles(settings, settings.googleSheets, name => name, "Нажмите «Обновить список вкладок».");
+            DrawToggles(settings, settings.googleSheets, name => name, L.T(TextKey.GoogleSheetsEmpty));
         }
 
         private void DrawExport(SheetImportSettings settings)
         {
-            settings.spreadsheetId = EditorGUILayout.TextField("ID таблицы", settings.spreadsheetId);
-            EditorGUILayout.LabelField(" ", "Ключ не нужен: таблица должна быть открыта по ссылке на просмотр.",
-                EditorStyles.miniLabel);
+            settings.spreadsheetId = EditorGUILayout.TextField(L.T(TextKey.SpreadsheetId), settings.spreadsheetId);
+            EditorGUILayout.LabelField(" ", L.T(TextKey.ExportHint), EditorStyles.miniLabel);
 
             DrawAllNone(settings.exportSheets.Count > 0, selected =>
             {
@@ -164,9 +213,10 @@ namespace Kentavr.SheetsToSO.Editor
                 using (new EditorGUILayout.HorizontalScope())
                 {
                     GUILayout.Space(22);
-                    EditorGUILayout.LabelField("Имя вкладки", EditorStyles.miniBoldLabel);
+                    EditorGUILayout.LabelField(L.T(TextKey.SheetName), EditorStyles.miniBoldLabel);
                     EditorGUILayout.LabelField("gid", EditorStyles.miniBoldLabel, GUILayout.Width(110));
-                    EditorGUILayout.LabelField("Тип таблицы", EditorStyles.miniBoldLabel, GUILayout.Width(TableTypeWidth));
+                    EditorGUILayout.LabelField(L.T(TextKey.TableType), EditorStyles.miniBoldLabel,
+                        GUILayout.Width(TableTypeWidth));
                     GUILayout.Space(28);
                 }
             }
@@ -192,7 +242,7 @@ namespace Kentavr.SheetsToSO.Editor
                 OnSettingsChanged();
             }
 
-            if (GUILayout.Button("Добавить вкладку"))
+            if (GUILayout.Button(L.T(TextKey.AddSheet)))
             {
                 settings.exportSheets.Add(new ExportSheetEntry { name = string.Empty, gid = string.Empty });
                 OnSettingsChanged();
@@ -203,10 +253,11 @@ namespace Kentavr.SheetsToSO.Editor
         {
             using (new EditorGUILayout.HorizontalScope())
             {
-                settings.csvFolder = EditorGUILayout.TextField("Папка с CSV", settings.csvFolder);
-                if (GUILayout.Button("Выбрать…", GUILayout.Width(80)))
+                settings.csvFolder = EditorGUILayout.TextField(L.T(TextKey.CsvFolder), settings.csvFolder);
+                if (GUILayout.Button(L.T(TextKey.Browse), GUILayout.Width(80)))
                 {
-                    var folder = EditorUtility.OpenFolderPanel("Папка с .csv / .tsv", settings.csvFolder, string.Empty);
+                    var folder = EditorUtility.OpenFolderPanel(L.T(TextKey.CsvFolderPanelTitle), settings.csvFolder,
+                        string.Empty);
                     if (!string.IsNullOrEmpty(folder))
                     {
                         settings.csvFolder = folder;
@@ -218,11 +269,11 @@ namespace Kentavr.SheetsToSO.Editor
                 }
             }
 
-            if (GUILayout.Button("Обновить список файлов"))
+            if (GUILayout.Button(L.T(TextKey.RefreshFileList)))
                 RefreshCsvFiles(settings);
 
             // Sheets of CSV files are named without the extension, as SheetSourceLoader.LoadCsvFolder names them.
-            DrawToggles(settings, settings.csvFiles, CsvFolderSource.SheetName, "Выберите папку с файлами .csv / .tsv.");
+            DrawToggles(settings, settings.csvFiles, CsvFolderSource.SheetName, L.T(TextKey.CsvFilesEmpty));
         }
 
         private void DrawToggles(SheetImportSettings settings, List<SheetToggle> list, Func<string, string> sheetName,
@@ -253,12 +304,12 @@ namespace Kentavr.SheetsToSO.Editor
             }
         }
 
-        // "Тип таблицы" of a sheet: code generation or a SheetTable<> subclass of the project (schema from code).
+        // "Table type" of a sheet: code generation or a SheetTable<> subclass of the project (schema from code).
         // Changes set GUI.changed, so OnGUI saves the settings and resets the check.
         private void DrawTableType(SheetImportSettings settings, string sheet)
         {
             var current = settings.GetTableType(sheet);
-            var labels = new List<string>(_tableTypes.Count + 2) { GenerateCodeLabel };
+            var labels = new List<string>(_tableTypes.Count + 2) { L.T(TextKey.GenerateCode) };
             labels.AddRange(_tableTypes);
 
             var index = 0;
@@ -268,7 +319,7 @@ namespace Kentavr.SheetsToSO.Editor
                 if (index == 0)
                 {
                     // The type is gone from the project: keep the binding, the check reports the error.
-                    labels.Add(current + " (не найден)");
+                    labels.Add(L.T(TextKey.TableTypeNotFound, current));
                     index = labels.Count - 1;
                 }
             }
@@ -293,13 +344,13 @@ namespace Kentavr.SheetsToSO.Editor
 
             using (new EditorGUILayout.HorizontalScope())
             {
-                EditorGUILayout.LabelField("Вкладки", EditorStyles.boldLabel);
-                if (GUILayout.Button("Все", EditorStyles.miniButtonLeft, GUILayout.Width(70)))
+                EditorGUILayout.LabelField(L.T(TextKey.Sheets), EditorStyles.boldLabel);
+                if (GUILayout.Button(L.T(TextKey.All), EditorStyles.miniButtonLeft, GUILayout.Width(70)))
                 {
                     setAll(true);
                     OnSettingsChanged();
                 }
-                if (GUILayout.Button("Ничего", EditorStyles.miniButtonRight, GUILayout.Width(70)))
+                if (GUILayout.Button(L.T(TextKey.None), EditorStyles.miniButtonRight, GUILayout.Width(70)))
                 {
                     setAll(false);
                     OnSettingsChanged();
@@ -313,13 +364,13 @@ namespace Kentavr.SheetsToSO.Editor
             {
                 using (new EditorGUI.DisabledScope(IsBusy))
                 {
-                    if (GUILayout.Button("Проверить", GUILayout.Height(24)))
+                    if (GUILayout.Button(L.T(TextKey.Check), GUILayout.Height(24)))
                         RunCheck(SheetImportSettings.instance);
                 }
 
                 using (new EditorGUI.DisabledScope(!CanApply))
                 {
-                    if (GUILayout.Button("Применить", GUILayout.Height(24)))
+                    if (GUILayout.Button(L.T(TextKey.Apply), GUILayout.Height(24)))
                     {
                         Apply();
                         // A dialog or an asset refresh may have run inside this layout pass.
@@ -332,8 +383,8 @@ namespace Kentavr.SheetsToSO.Editor
             {
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    EditorGUILayout.LabelField(_busyText);
-                    if (GUILayout.Button("Отмена", GUILayout.Width(80)))
+                    EditorGUILayout.LabelField(L.T(_busyText.Value));
+                    if (GUILayout.Button(L.T(TextKey.Cancel), GUILayout.Width(80)))
                         CancelLoading();
                 }
             }
@@ -343,8 +394,9 @@ namespace Kentavr.SheetsToSO.Editor
         {
             _scroll = EditorGUILayout.BeginScrollView(_scroll);
 
-            if (!string.IsNullOrEmpty(_sourceMessage))
-                EditorGUILayout.HelpBox(_sourceMessage, MessageType.Error);
+            var sourceMessage = _sourceMessage?.Invoke();
+            if (!string.IsNullOrEmpty(sourceMessage))
+                EditorGUILayout.HelpBox(sourceMessage, MessageType.Error);
 
             if (_loaded != null)
             {
@@ -361,26 +413,26 @@ namespace Kentavr.SheetsToSO.Editor
 
                 if (_check.DiffText != null)
                 {
-                    EditorGUILayout.LabelField("Изменения относительно последнего импорта", EditorStyles.boldLabel);
+                    EditorGUILayout.LabelField(L.T(TextKey.DiffHeader), EditorStyles.boldLabel);
                     DrawMono(_check.DiffText);
                 }
 
                 var errorCount = _check.Errors.Count + (_loaded?.Errors.Count ?? 0);
                 if (errorCount > 0)
-                    EditorGUILayout.HelpBox($"Ошибок: {errorCount}. Применение недоступно.", MessageType.Error);
+                    EditorGUILayout.HelpBox(L.T(TextKey.ErrorCount, errorCount), MessageType.Error);
                 else
-                    EditorGUILayout.HelpBox("Ошибок нет — можно применять.", MessageType.Info);
+                    EditorGUILayout.HelpBox(L.T(TextKey.NoErrors), MessageType.Info);
             }
 
             if (!string.IsNullOrEmpty(_importText))
             {
                 EditorGUILayout.Space();
                 if (_waitingForReload)
-                    EditorGUILayout.HelpBox("Код обновлён, ассеты обновятся после перекомпиляции.", MessageType.Info);
+                    EditorGUILayout.HelpBox(L.T(TextKey.ImportWaitingForReload), MessageType.Info);
                 else if (_importHasErrors)
-                    EditorGUILayout.HelpBox("Импорт завершён с ошибками, подробности ниже и в Console.", MessageType.Error);
+                    EditorGUILayout.HelpBox(L.T(TextKey.ImportFinishedWithErrors), MessageType.Error);
                 else
-                    EditorGUILayout.HelpBox("Импорт применён.", MessageType.Info);
+                    EditorGUILayout.HelpBox(L.T(TextKey.ImportApplied), MessageType.Info);
                 DrawMono(_importText);
             }
 
@@ -422,7 +474,7 @@ namespace Kentavr.SheetsToSO.Editor
             {
                 settings.csvFiles.Clear();
                 OnSettingsChanged();
-                _sourceMessage = $"Папка '{folder}' не найдена";
+                _sourceMessage = () => L.T(TextKey.CsvFolderNotFound, folder);
                 return;
             }
 
@@ -434,19 +486,20 @@ namespace Kentavr.SheetsToSO.Editor
             catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
             {
                 OnSettingsChanged();
-                _sourceMessage = $"Папка '{folder}' не читается: {e.Message}";
+                var reason = e.Message;
+                _sourceMessage = () => L.T(TextKey.CsvFolderUnreadable, folder, reason);
                 return;
             }
 
             SheetImportSettings.Merge(settings.csvFiles, files);
             OnSettingsChanged();
             if (files.Count == 0)
-                _sourceMessage = $"В папке '{folder}' нет файлов .csv / .tsv";
+                _sourceMessage = () => L.T(TextKey.CsvFolderNoFiles, folder);
         }
 
         private async void RefreshGoogleSheets(SheetImportSettings settings)
         {
-            var token = BeginLoading("Загрузка списка вкладок…");
+            var token = BeginLoading(TextKey.LoadingSheetList);
             SheetListResult result;
             try
             {
@@ -466,7 +519,8 @@ namespace Kentavr.SheetsToSO.Editor
             if (result.Error != null)
             {
                 ResetCheck();
-                _sourceMessage = result.Error;
+                var error = result.Error;
+                _sourceMessage = () => error;
                 return;
             }
 
@@ -487,7 +541,7 @@ namespace Kentavr.SheetsToSO.Editor
                 @namespace = settings.@namespace,
             };
 
-            var token = BeginLoading("Загрузка…");
+            var token = BeginLoading(TextKey.Loading);
             SheetLoadResult loaded;
             try
             {
@@ -498,7 +552,7 @@ namespace Kentavr.SheetsToSO.Editor
                 if (this != null)
                 {
                     EndLoading();
-                    _sourceMessage = "Загрузка отменена";
+                    _sourceMessage = () => L.T(TextKey.LoadingCancelled);
                 }
                 return;
             }
@@ -543,10 +597,8 @@ namespace Kentavr.SheetsToSO.Editor
             if (!CanApply)
                 return;
 
-            if (_check.HasRemovals && !EditorUtility.DisplayDialog(Title,
-                    "В diff есть удалённые строки или вкладки. Удалённые строки пропадут из ассетов; " +
-                    "ассеты удалённых вкладок останутся на месте.\n\nПрименить импорт?",
-                    "Применить", "Отмена"))
+            if (_check.HasRemovals && !EditorUtility.DisplayDialog(Title, L.T(TextKey.RemovalsDialog),
+                    L.T(TextKey.Apply), L.T(TextKey.Cancel)))
                 return;
 
             var request = _checkedRequest;
@@ -575,7 +627,7 @@ namespace Kentavr.SheetsToSO.Editor
         }
 
         // Controls are disabled while loading, so only one loading runs at a time.
-        private CancellationToken BeginLoading(string text)
+        private CancellationToken BeginLoading(TextKey text)
         {
             _cancel = new CancellationTokenSource();
             _busyText = text;

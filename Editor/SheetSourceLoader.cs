@@ -147,9 +147,9 @@ namespace Kentavr.SheetsToSO.Editor
         private GoogleSheetsClient CreateClient(string apiKey, string spreadsheetId)
         {
             if (string.IsNullOrWhiteSpace(apiKey))
-                throw new ArgumentException("API-ключ не задан");
+                throw new ArgumentException(L.T(TextKey.ApiKeyMissing));
             if (string.IsNullOrWhiteSpace(spreadsheetId))
-                throw new ArgumentException("ID таблицы не задан");
+                throw new ArgumentException(L.T(TextKey.SpreadsheetIdMissing));
             return new GoogleSheetsClient(_http, apiKey.Trim());
         }
 
@@ -163,9 +163,9 @@ namespace Kentavr.SheetsToSO.Editor
                 case ArgumentException argument:
                     return FirstLine(argument.Message);
                 case HttpRequestException http:
-                    return "Сетевая ошибка: " + http.Message;
+                    return L.T(TextKey.NetworkError, http.Message);
                 case OperationCanceledException _:
-                    return "Время ожидания ответа истекло";
+                    return L.T(TextKey.Timeout);
                 default:
                     return e.GetType().Name + ": " + e.Message;
             }

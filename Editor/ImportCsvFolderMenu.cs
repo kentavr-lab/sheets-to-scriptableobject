@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 
@@ -9,12 +11,81 @@ namespace Kentavr.SheetsToSO.Editor
     /// Temporary command: imports every .csv/.tsv file of a folder on disk into the selected project folder.
     /// The main way to import is <see cref="SheetImportWindow"/>.
     /// </summary>
+    /// <remarks>
+    /// The <see cref="MenuItem"/> path is fixed at compile time (English). For another editor language the item is
+    /// replaced with a translated one through the internal <c>UnityEditor.Menu</c> API; when that API is missing,
+    /// the English item stays.
+    /// </remarks>
+    [InitializeOnLoad]
     internal static class ImportCsvFolderMenu
     {
-        private const string MenuPath = "Assets/Sheets to SO/Import CSV folder here…";
+        private const string MenuFolder = "Assets/Sheets to SO/";
+        private const string MenuPath = MenuFolder + "Import CSV folder here…";
+        private const int MenuPriority = 1000; // Default priority of [MenuItem].
         private const string Namespace = "SheetsData";
         private const string CodeSubfolder = "Generated";
         private const string LogPrefix = "Sheets to SO: ";
+
+        private const BindingFlags InternalStatic = BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public;
+
+        private static readonly MethodInfo AddMenuItemMethod = FindMenuMethod("AddMenuItem",
+            typeof(string), typeof(string), typeof(bool), typeof(int), typeof(Action), typeof(Func<bool>));
+
+        private static readonly MethodInfo RemoveMenuItemMethod = FindMenuMethod("RemoveMenuItem", typeof(string));
+
+        // Path of the item now in the menu; after a domain reload the menu has the [MenuItem] path.
+        private static string shownPath = MenuPath;
+
+        static ImportCsvFolderMenu()
+        {
+            EditorLocale.Changed += UpdateMenuItem;
+            // Menus are rebuilt from [MenuItem] attributes after the domain is loaded.
+            EditorApplication.delayCall += UpdateMenuItem;
+        }
+
+        private static void UpdateMenuItem()
+        {
+            var wanted = MenuFolder + L.T(TextKey.MenuImportCsvFolder);
+            if (wanted == shownPath || AddMenuItemMethod == null || RemoveMenuItemMethod == null)
+                return;
+
+            // Add first: if adding fails, the old item stays; if removing the old one fails, the new one is taken back,
+            // so the menu never has both.
+            if (!TryInvoke(AddMenuItemMethod, wanted, string.Empty, false, MenuPriority, (Action)ImportHere,
+                    (Func<bool>)CanImport))
+                return;
+
+            if (TryInvoke(RemoveMenuItemMethod, shownPath))
+                shownPath = wanted;
+            else
+                TryInvoke(RemoveMenuItemMethod, wanted);
+        }
+
+        private static MethodInfo FindMenuMethod(string name, params Type[] parameters)
+        {
+            try
+            {
+                return typeof(Menu).GetMethod(name, InternalStatic, null, parameters, null);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        private static bool TryInvoke(MethodInfo method, params object[] args)
+        {
+            try
+            {
+                method.Invoke(null, args);
+                return true;
+            }
+            catch (Exception)
+            {
+                // Internal API of another Unity version: keep the menu as it is.
+                return false;
+            }
+        }
 
         [MenuItem(MenuPath, true)]
         private static bool CanImport()
@@ -29,7 +100,7 @@ namespace Kentavr.SheetsToSO.Editor
             if (target == null)
                 return;
 
-            var source = EditorUtility.OpenFolderPanel("Folder with .csv / .tsv files", string.Empty, string.Empty);
+            var source = EditorUtility.OpenFolderPanel(L.T(TextKey.CsvFolderPanelTitle), string.Empty, string.Empty);
             if (string.IsNullOrEmpty(source))
                 return;
 
