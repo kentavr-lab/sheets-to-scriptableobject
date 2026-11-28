@@ -33,6 +33,8 @@ namespace Kentavr.SheetsToSO.Editor
 
         private static readonly MethodInfo RemoveMenuItemMethod = FindMenuMethod("RemoveMenuItem", typeof(string));
 
+        private static readonly MethodInfo MenuItemExistsMethod = FindMenuMethod("MenuItemExists", typeof(string));
+
         // Path of the item now in the menu; after a domain reload the menu has the [MenuItem] path.
         private static string shownPath = MenuPath;
 
@@ -49,16 +51,33 @@ namespace Kentavr.SheetsToSO.Editor
             if (wanted == shownPath || AddMenuItemMethod == null || RemoveMenuItemMethod == null)
                 return;
 
-            // Add first: if adding fails, the old item stays; if removing the old one fails, the new one is taken back,
-            // so the menu never has both.
+            // Add first: if adding fails, the old item stays; if removing the old one fails (or the old one is still
+            // in the menu), the new one is taken back, so the menu never has both.
             if (!TryInvoke(AddMenuItemMethod, wanted, string.Empty, false, MenuPriority, (Action)ImportHere,
                     (Func<bool>)CanImport))
                 return;
 
-            if (TryInvoke(RemoveMenuItemMethod, shownPath))
+            if (TryInvoke(RemoveMenuItemMethod, shownPath) && !StillInMenu(shownPath))
                 shownPath = wanted;
             else
                 TryInvoke(RemoveMenuItemMethod, wanted);
+        }
+
+        // RemoveMenuItem may return silently without removing the item; check it when Unity lets us.
+        // Without MenuItemExists the removal is trusted.
+        private static bool StillInMenu(string path)
+        {
+            if (MenuItemExistsMethod == null)
+                return false;
+
+            try
+            {
+                return MenuItemExistsMethod.Invoke(null, new object[] { path }) is bool exists && exists;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
         }
 
         private static MethodInfo FindMenuMethod(string name, params Type[] parameters)
