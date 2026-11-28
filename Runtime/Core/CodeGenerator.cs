@@ -433,7 +433,7 @@ namespace Kentavr.SheetsToSO.Core
         /// The property name must differ from every column name of the sheet (its own column included),
         /// from the row class name and from the private field <c>__table</c>.
         /// </summary>
-        internal static string FindRefPropertyConflict(ColumnDefinition column, IReadOnlyList<ColumnDefinition> columns,
+        public static string FindRefPropertyConflict(ColumnDefinition column, IReadOnlyList<ColumnDefinition> columns,
             string rowClassName)
         {
             var property = RefPropertyName(column.Name);

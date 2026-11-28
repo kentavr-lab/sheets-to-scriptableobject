@@ -85,6 +85,17 @@ namespace Kentavr.SheetsToSO.Cli
                     stdout.WriteLine("error: " + error);
                     errorCount++;
                 }
+                // Same rule as the import: a generated ref<X> property must not clash with row class members.
+                foreach (var column in parsed[i].Columns)
+                {
+                    if (column.Type.Kind != ColumnKind.Ref)
+                        continue;
+                    var conflict = CodeGenerator.FindRefPropertyConflict(column, parsed[i].Columns, sheet.Name);
+                    if (conflict == null)
+                        continue;
+                    stdout.WriteLine($"error: {sheet.Name}!{column.Address}: Column '{column.Name}': {conflict}");
+                    errorCount++;
+                }
                 foreach (var warning in sheet.Warnings)
                 {
                     stdout.WriteLine($"warning: {sheet.Name}!{warning}");
