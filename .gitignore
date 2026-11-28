@@ -146,3 +146,7 @@ Tests~/**/obj/
 !Cli~/**/*.csproj
 Cli~/**/bin/
 Cli~/**/obj/
+
+# release script output (Tools~/release.py)
+/dist/
+__pycache__/
