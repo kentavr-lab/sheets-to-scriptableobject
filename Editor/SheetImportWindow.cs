@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Kentavr.SheetsToSO.Core;
 using UnityEditor;
 using UnityEngine;
 
@@ -241,10 +242,13 @@ namespace Kentavr.SheetsToSO.Editor
 
             foreach (var item in list)
             {
+                var sheet = item.name != null ? sheetName(item.name) : null;
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    item.selected = EditorGUILayout.ToggleLeft(item.name, item.selected);
-                    DrawTableType(settings, item.name != null ? sheetName(item.name) : null);
+                    // The toggle shows the sheet name; the stored name (file name for CSV) is in the tooltip.
+                    item.selected = EditorGUILayout.ToggleLeft(new GUIContent(sheet ?? item.name, item.name),
+                        item.selected);
+                    DrawTableType(settings, sheet);
                 }
             }
         }
@@ -507,6 +511,9 @@ namespace Kentavr.SheetsToSO.Editor
                 sheet.tableType = settings.GetTableType(sheet.name);
             request.sheets = loaded.Sheets;
             _check = SheetAssetImporter.Check(request);
+            // Nothing loaded because of load errors: they already say why, the empty set error repeats them.
+            if (loaded.Sheets.Count == 0 && loaded.Errors.Count > 0)
+                _check.Errors.Remove(SheetSetChecker.NoSheetsError);
             _loaded = loaded;
             _checkedRequest = request;
         }
