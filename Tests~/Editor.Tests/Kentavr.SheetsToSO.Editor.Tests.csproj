@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>Kentavr.SheetsToSO.Editor.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <!-- The string tables of the editor are free of Unity: compile the shipped sources as they are. -->
+  <ItemGroup>
+    <Compile Include="../../Editor/Localization/EditorText*.cs" Link="Localization/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="NUnit" Version="3.14.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />
+  </ItemGroup>
+
+</Project>
