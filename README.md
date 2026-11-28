@@ -20,7 +20,7 @@ https://github.com/kentavr-lab/sheets-to-scriptableobject.git
 A specific version, with a tag:
 
 ```
-https://github.com/kentavr-lab/sheets-to-scriptableobject.git#v0.3.0
+https://github.com/kentavr-lab/sheets-to-scriptableobject.git#v0.4.0
 ```
 
 **Via `Packages/manifest.json`.** Add a line to `dependencies`:
@@ -33,9 +33,13 @@ https://github.com/kentavr-lab/sheets-to-scriptableobject.git#v0.3.0
 }
 ```
 
-To pin a version, append `#v0.3.0` to the URL.
+To pin a version, append `#v0.4.0` to the URL.
 
 **From disk.** Clone the repository, then *Package Manager → + → Add package from disk…* and select `package.json` in the root of the clone.
+
+**From `.unitypackage`.** Download `SheetsToSO-<version>.unitypackage` from the [Releases](https://github.com/kentavr-lab/sheets-to-scriptableobject/releases) page, then *Assets → Import Package → Custom Package…* and select the file. The files go to `Assets/SheetsToSO/`. To update, delete `Assets/SheetsToSO/` and import the new `.unitypackage`.
+
+> Use only one installation method. The package via Package Manager and the `.unitypackage` in the same project give duplicate classes and GUIDs.
 
 ## Usage
 
@@ -190,7 +194,7 @@ Sheets: 2, errors: 2, warnings: 0
 | `Kentavr.SheetsToSO.Editor` | `Editor/` | Editor only: import window, code generation, API key storage, the `[SheetRef]` drawer. |
 | — | `Cli~/` | The `sheets-to-so` console application for CI: checks sheets with an exit code. References the core via `Tests~/Core`; not included in the Unity package. |
 
-Unity does not import the `Cli~/`, `Documentation~/` and `Tests~/` folders.
+Unity does not import the `Cli~/`, `Documentation~/`, `Tests~/` and `Tools~/` folders. `Tools~/release.py` builds the `.unitypackage` for releases.
 
 ## Tests
 

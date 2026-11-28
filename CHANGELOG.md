@@ -4,6 +4,23 @@ All notable changes to this package. The format is based on [Keep a Changelog](h
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-11-28
+
+### Added
+
+- English and Russian editor interface: an *EN | RU* switch in the import window, stored in `EditorPrefs` (`Kentavr.SheetsToSO.Language`). The import window, the removal confirmation dialog, source loading messages, `[SheetRef]` drawer messages and the *Import CSV folder here…* menu item are translated; data errors, warnings, the diff and the Console report stay in English.
+- Short Russian README `README.ru.md`.
+- GitHub Releases now include `SheetsToSO-<version>.unitypackage` for installing the package into `Assets/SheetsToSO/`.
+
+### Changed
+
+- Documentation (`README.md`, data format, changelog) is in English.
+
+### Fixed
+
+- The *Assets → Sheets to SO* menu item no longer switches back to English after a script reload.
+- Spreadsheet ID and API key hints in the import window wrap to the window width, including after a script recompile.
+
 ## [0.3.0] — 2026-11-28
 
 ### Added
