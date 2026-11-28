@@ -60,6 +60,20 @@ namespace Kentavr.SheetsToSO.Cli.Tests
         }
 
         [Test]
+        public async Task Csv_RefPropertyConflict_ExitOneWithAddress()
+        {
+            var units = Write("Units.csv", "id,name:string,hp:int,rarity:enum<Rarity>,Weapon:ref<Weapons>\nknight,Knight,100,Common,sword\n");
+            var weapons = Write("Weapons.tsv", WeaponsTsv);
+
+            var run = await RunAsync("--source", "csv", "--file", units, "--file", weapons);
+
+            Assert.That(run.Code, Is.EqualTo(1), run.ToString());
+            Assert.That(run.Out, Does.Contain(
+                "error: Units!E1: Column 'Weapon': property 'Weapon' generated for ref<Weapons> has the same name as column 'Weapon'"));
+            Assert.That(run.Out, Does.Contain("errors: 1"));
+        }
+
+        [Test]
         public async Task Csv_WrongType_ExitOneWithAddress()
         {
             var units = Write("Units.csv", UnitsHeader + "\nknight,Knight,abc,Common,sword\n");
