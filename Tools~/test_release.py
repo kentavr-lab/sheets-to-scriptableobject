@@ -70,8 +70,8 @@ class BuildFromRepoTests(unittest.TestCase):
         expected = {
             "Assets/SheetsToSO/" + p[:-len(".meta")]
             for p in tracked
-            if p.endswith(".meta") and not any(
-                s.startswith(".") or s.endswith("~") for s in p.split("/"))}
+            if p.endswith(".meta") and p.split("/")[0] not in ("Tests", "Tests.meta")
+            and not any(s.startswith(".") or s.endswith("~") for s in p.split("/"))}
         self.assertEqual(set(self.by_path), expected)
 
     def test_entries_match_repo_files(self):
@@ -97,6 +97,7 @@ class BuildFromRepoTests(unittest.TestCase):
         for pathname in self.by_path:
             for bad in ("Cli~", "Tests~", "Documentation~", "Tools~", ".github", ".gitignore"):
                 self.assertNotIn(bad, pathname)
+            self.assertFalse(pathname.startswith("Assets/SheetsToSO/Tests"), pathname)
         for rel in ("package.json", "README.md", "README.ru.md", "CHANGELOG.md", "LICENSE",
                     "Runtime", "Runtime/Core", "Runtime/Core/Json", "Editor",
                     "Editor/Localization", "Runtime/Core/CsvReader.cs",
@@ -169,6 +170,31 @@ class FixtureTests(unittest.TestCase):
             {"Assets/SheetsToSO/package.json", "Assets/SheetsToSO/Runtime",
              "Assets/SheetsToSO/Runtime/A.cs", "Assets/SheetsToSO/CHANGELOG.md"})
         self.assertEqual(set(package), {"a" * 32, "b" * 32, "c" * 32, "d" * 32})
+
+    def add_unity_tests(self):
+        self.write("Tests/Editor/X.cs", "class X {}")
+        self.write_meta("Tests/Editor/X.cs", "e" * 32)
+        self.write_meta("Tests/Editor", "f" * 32, folder=True)
+        self.write_meta("Tests", "1" * 32, folder=True)
+
+    def test_unity_tests_are_not_packaged(self):
+        self.add_unity_tests()
+        self.git_add()
+        proc = self.build()
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        package = read_package(os.path.join(self.out, "SheetsToSO-1.2.3.unitypackage"))
+        self.assertEqual(
+            {e["pathname"].decode() for e in package.values()},
+            {"Assets/SheetsToSO/package.json", "Assets/SheetsToSO/Runtime",
+             "Assets/SheetsToSO/Runtime/A.cs", "Assets/SheetsToSO/CHANGELOG.md"})
+        self.assertEqual(set(package), {"a" * 32, "b" * 32, "c" * 32, "d" * 32})
+
+    def test_unity_test_without_meta_is_ignored(self):
+        self.add_unity_tests()
+        self.write("Tests/Editor/NoMeta.cs", "class NoMeta {}")
+        self.git_add()
+        proc = self.build()
+        self.assertEqual(proc.returncode, 0, proc.stderr)
 
     def test_file_without_meta_fails(self):
         self.write("Runtime/B.cs", "class B {}")

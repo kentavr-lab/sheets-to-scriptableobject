@@ -110,7 +110,7 @@ public class Unit : MonoBehaviour
 - An empty value is allowed and is shown as `(empty)` / «(пусто)». A value that is not in the table is shown in red with a tooltip and is not erased.
 - No table asset or a wrong type in the attribute — a plain text field with an error above it; the value can be edited by hand. The attribute on a non-`string` field — a plain field and a message that `string` is required.
 
-**Checking in Unity.** There are no automated tests for the editor part; it is checked manually:
+**Checking in Unity.** There are no automated tests for the `[SheetRef]` drawer; it is checked manually:
 
 1. A `MonoBehaviour` in a prefab with `[SheetRef(typeof(WeaponsTable))] public string weaponId;` — the field is shown as a dropdown button; the list contains `(empty)` / «(пусто)» and all `id` values from `Weapons.asset` in row order; searching by part of an `id` filters the list.
 2. Selecting an `id` writes it to the field, is undone with `Ctrl+Z`, and stays in the prefab after saving.
@@ -194,7 +194,7 @@ Sheets: 2, errors: 2, warnings: 0
 | `Kentavr.SheetsToSO.Editor` | `Editor/` | Editor only: import window, code generation, API key storage, the `[SheetRef]` drawer. |
 | — | `Cli~/` | The `sheets-to-so` console application for CI: checks sheets with an exit code. References the core via `Tests~/Core`; not included in the Unity package. |
 
-Unity does not import the `Cli~/`, `Documentation~/`, `Tests~/` and `Tools~/` folders. `Tools~/release.py` builds the `.unitypackage` for releases.
+Unity does not import the `Cli~/`, `Documentation~/`, `Tests~/` and `Tools~/` folders. `Tools~/release.py` builds the `.unitypackage` for releases; besides these folders, it leaves out `Tests/` (the Unity tests of the package).
 
 ## Tests
 
@@ -207,6 +207,8 @@ dotnet test "Tests~/Editor.Tests"
 ```
 
 Requires .NET SDK 8.0 or newer.
+
+Unity EditMode tests (editor language, the Assets menu item, the import window) are in `Tests/Editor/`: add `"testables": ["com.kentavr-lab.sheets-to-scriptableobject"]` to `Packages/manifest.json` of the project and open *Window → General → Test Runner → EditMode*.
 
 ## License
 

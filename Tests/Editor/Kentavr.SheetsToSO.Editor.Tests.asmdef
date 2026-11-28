@@ -1,0 +1,26 @@
+{
+    "name": "Kentavr.SheetsToSO.Editor.Tests",
+    "rootNamespace": "Kentavr.SheetsToSO.Editor.Tests",
+    "references": [
+        "Kentavr.SheetsToSO.Editor",
+        "Kentavr.SheetsToSO",
+        "Kentavr.SheetsToSO.Core",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
