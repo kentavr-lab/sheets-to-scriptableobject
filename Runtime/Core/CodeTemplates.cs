@@ -21,7 +21,11 @@ namespace Kentavr.SheetsToSO.Core
         /// <summary>Placeholder for the enum name.</summary>
         public const string EnumNamePlaceholder = "{{EnumName}}";
 
-        /// <summary>Placeholder for the enum members, each line indented by 8 spaces.</summary>
+        /// <summary>
+        /// Placeholder for the enum members with explicit values (<c>Common = 0,</c>), each line indented by 8 spaces.
+        /// The importer reads the values back from the generated file, so a custom template must keep
+        /// <c>enum {{EnumName}} { {{Members}} }</c> readable.
+        /// </summary>
         public const string MembersPlaceholder = "{{Members}}";
 
         /// <summary>Placeholder for the table class name.</summary>
