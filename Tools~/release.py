@@ -28,7 +28,7 @@ PACKAGE_FILE_NAME = "SheetsToSO-{version}.unitypackage"
 FIXED_MTIME = 315532800  # 1980-01-01, the same for every build
 GUID_RE = re.compile(r"^guid:\s*([0-9a-fA-F]{32})\s*$", re.MULTILINE)
 DEV_ONLY_ROOTS = ("Tests",)  # package development only, not for Assets/ of a user
-DEFAULT_ROOT =os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class ReleaseError(Exception):
