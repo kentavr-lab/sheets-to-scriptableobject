@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Kentavr.SheetsToSO.Core;
 using UnityEditor;
 using UnityEngine;
 
@@ -211,10 +212,10 @@ namespace Kentavr.SheetsToSO.Editor
             if (GUILayout.Button("Обновить список файлов"))
                 RefreshCsvFiles(settings);
 
-            DrawToggles(settings.csvFiles, "Выберите папку с файлами .csv / .tsv.");
+            DrawToggles(settings.csvFiles, "Выберите папку с файлами .csv / .tsv.", CsvFolderSource.SheetName);
         }
 
-        private void DrawToggles(List<SheetToggle> list, string emptyText)
+        private void DrawToggles(List<SheetToggle> list, string emptyText, Func<string, string> label = null)
         {
             if (list.Count == 0)
             {
@@ -229,7 +230,10 @@ namespace Kentavr.SheetsToSO.Editor
             });
 
             foreach (var item in list)
-                item.selected = EditorGUILayout.ToggleLeft(item.name, item.selected);
+            {
+                var text = label?.Invoke(item.name) ?? item.name;
+                item.selected = EditorGUILayout.ToggleLeft(new GUIContent(text, item.name), item.selected);
+            }
         }
 
         private void DrawAllNone(bool visible, Action<bool> setAll)
@@ -455,6 +459,9 @@ namespace Kentavr.SheetsToSO.Editor
 
             request.sheets = loaded.Sheets;
             _check = SheetAssetImporter.Check(request);
+            // Nothing loaded because of load errors: they already say why, the empty set error repeats them.
+            if (loaded.Sheets.Count == 0 && loaded.Errors.Count > 0)
+                _check.Errors.Remove(SheetSetChecker.NoSheetsError);
             _loaded = loaded;
             _checkedRequest = request;
         }
