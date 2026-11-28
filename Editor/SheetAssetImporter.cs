@@ -243,10 +243,22 @@ namespace Kentavr.SheetsToSO.Editor
 
             foreach (var enumName in prepared.Enums.EnumNames)
             {
+                var path = $"{folder}/{enumName}.cs";
+                if (!TryReadPreviousEnum(path, enumName, report, out var previous))
+                    continue;
+
                 try
                 {
-                    files.Add(new KeyValuePair<string, string>($"{folder}/{enumName}.cs",
-                        CodeGenerator.GenerateEnum(enumName, prepared.Enums.Members[enumName], prepared.Options)));
+                    var merged = CodeGenerator.MergeEnumMembers(previous, prepared.Enums.Members[enumName]);
+                    files.Add(new KeyValuePair<string, string>(path,
+                        CodeGenerator.GenerateEnum(enumName, merged.Members, prepared.Options)));
+
+                    foreach (var name in merged.Removed)
+                    {
+                        var value = merged.Members.First(member => member.Name == name).Value;
+                        report.Warnings.Add($"Enum '{enumName}': value '{name}' is no longer in the sheets; " +
+                            $"kept as {name} = {value} to preserve serialized values");
+                    }
                 }
                 catch (ArgumentException e)
                 {
@@ -255,6 +267,36 @@ namespace Kentavr.SheetsToSO.Editor
             }
 
             return files;
+        }
+
+        // Members of the enum as already generated, so that their values survive a new import.
+        // No file: no previous members. An unreadable file is an import error.
+        private static bool TryReadPreviousEnum(string path, string enumName, SheetImportReport report,
+            out IReadOnlyList<EnumMember> members)
+        {
+            members = Array.Empty<EnumMember>();
+            if (!File.Exists(path))
+                return true;
+
+            string reason;
+            try
+            {
+                var read = CodeGenerator.ReadEnumMembers(File.ReadAllText(path, Utf8NoBom), enumName);
+                if (read.IsValid)
+                {
+                    members = read.Members;
+                    return true;
+                }
+                reason = read.Error;
+            }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
+            {
+                reason = e.Message;
+            }
+
+            report.Errors.Add($"Enum '{enumName}': cannot read existing values from '{path}': {reason}; " +
+                "fix or delete the file to renumber");
+            return false;
         }
 
         // Writes only files whose text differs, so unchanged code does not trigger a recompile.
@@ -475,6 +517,9 @@ namespace Kentavr.SheetsToSO.Editor
             foreach (var path in report.AssetsWithoutSheet)
                 Debug.LogWarning(LogPrefix + $"asset '{path}' has no sheet in this import; it was not deleted",
                     AssetDatabase.LoadMainAssetAtPath(path));
+
+            foreach (var warning in report.Warnings)
+                Debug.LogWarning(LogPrefix + warning);
 
             foreach (var error in report.Errors)
                 Debug.LogError(LogPrefix + error);
