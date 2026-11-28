@@ -12,6 +12,9 @@ namespace Kentavr.SheetsToSO.Core
         /// <summary>Shown instead of a diff when the previous snapshot has errors.</summary>
         public const string PreviousUnreadableText = "Previous snapshot cannot be read, diff is not available";
 
+        /// <summary>Error of an empty sheet set.</summary>
+        public const string NoSheetsError = "No sheets to import";
+
         private const string TableSuffix = "Table";
 
         private static readonly EnumMembersResult NoEnums = new EnumMembersResult(
@@ -35,7 +38,7 @@ namespace Kentavr.SheetsToSO.Core
 
             if (sheets.Count == 0)
             {
-                errors.Add("No sheets to import");
+                errors.Add(NoSheetsError);
                 nameErrors = true;
             }
 
