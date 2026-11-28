@@ -53,6 +53,7 @@ namespace Kentavr.SheetsToSO.Editor
 
         private Font _monoFont;
         private GUIStyle _monoStyle;
+        private GUIStyle _hintStyle;
 
         // Full names of the SheetTable<> subclasses of the project; refreshed in OnEnable, i.e. after each recompile.
         private List<string> _tableTypes = new List<string>();
@@ -86,6 +87,7 @@ namespace Kentavr.SheetsToSO.Editor
                 DestroyImmediate(_monoFont);
             _monoFont = null;
             _monoStyle = null;
+            _hintStyle = null;
         }
 
         private void OnGUI()
@@ -189,7 +191,7 @@ namespace Kentavr.SheetsToSO.Editor
                     OnSettingsChanged();
                 }
             }
-            EditorGUILayout.LabelField(" ", L.T(TextKey.ApiKeyHint), EditorStyles.miniLabel);
+            DrawHint(L.T(TextKey.ApiKeyHint));
 
             if (GUILayout.Button(L.T(TextKey.RefreshSheetList)))
                 RefreshGoogleSheets(settings);
@@ -200,7 +202,7 @@ namespace Kentavr.SheetsToSO.Editor
         private void DrawExport(SheetImportSettings settings)
         {
             settings.spreadsheetId = EditorGUILayout.TextField(L.T(TextKey.SpreadsheetId), settings.spreadsheetId);
-            EditorGUILayout.LabelField(" ", L.T(TextKey.ExportHint), EditorStyles.miniLabel);
+            DrawHint(L.T(TextKey.ExportHint));
 
             DrawAllNone(settings.exportSheets.Count > 0, selected =>
             {
@@ -437,6 +439,20 @@ namespace Kentavr.SheetsToSO.Editor
             }
 
             EditorGUILayout.EndScrollView();
+        }
+
+        // A hint under a field, aligned with the field column. LabelField(" ", text, style) reserves exactly one line,
+        // so a wrapped hint would be cut; a plain wrapped label gets the height it needs.
+        private void DrawHint(string text)
+        {
+            if (_hintStyle == null)
+                _hintStyle = new GUIStyle(EditorStyles.miniLabel) { wordWrap = true };
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.Space(EditorGUIUtility.labelWidth + 2);
+                GUILayout.Label(text, _hintStyle);
+            }
         }
 
         private void DrawMono(string text)
