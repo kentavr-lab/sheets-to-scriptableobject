@@ -127,6 +127,90 @@ namespace Kentavr.SheetsToSO.Core.Tests
             Assert.Throws<ArgumentException>(() => RowMapper.Map(typeof(TestRow), sheet.Rows[0], "Units"));
         }
 
+#pragma warning disable CS0649 // Fields are set through reflection only.
+        public class BaseCodeRow
+        {
+            [UnityEngine.SerializeField] private string id;
+            public int level = 7;
+
+            public string Id => id;
+        }
+
+        public sealed class CodeRow : BaseCodeRow
+        {
+            [UnityEngine.SerializeField] private float speed;
+            private int hidden;
+            public List<int> levels;
+            public List<Rarity> rarities;
+            public List<string> tags;
+
+            public float Speed => speed;
+            public int Hidden => hidden;
+        }
+#pragma warning restore CS0649
+
+        private static CodeRow MapCode(string[] header, string[] values)
+        {
+            var sheet = SheetParser.Parse("Units", new[] { header, values }, typeof(CodeRow));
+            Assert.That(sheet.IsValid, Is.True, string.Join("; ", sheet.Errors));
+            return (CodeRow)RowMapper.Map(typeof(CodeRow), sheet.Rows[0], "Units");
+        }
+
+        [Test]
+        public void MapsSerializeFieldPrivateField()
+        {
+            var row = MapCode(new[] { "id", "speed" }, new[] { "knight", "1.5" });
+
+            Assert.That(row.Speed, Is.EqualTo(1.5f));
+        }
+
+        [Test]
+        public void MapsBaseClassFields()
+        {
+            var row = MapCode(new[] { "id", "level" }, new[] { "knight", "3" });
+
+            Assert.That(row.Id, Is.EqualTo("knight"));
+            Assert.That(row.level, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void MapsListFields()
+        {
+            var row = MapCode(new[] { "id", "levels", "rarities", "tags" }, new[] { "knight", "1|2", "Common|Epic", "a" });
+
+            Assert.That(row.levels, Is.EqualTo(new List<int> { 1, 2 }));
+            Assert.That(row.rarities, Is.EqualTo(new List<Rarity> { Rarity.Common, Rarity.Epic }));
+            Assert.That(row.tags, Is.EqualTo(new List<string> { "a" }));
+        }
+
+        [Test]
+        public void EmptyListCellsGiveEmptyLists()
+        {
+            var row = MapCode(new[] { "id", "levels", "rarities" }, new[] { "knight", "", "" });
+
+            Assert.That(row.levels, Is.Empty);
+            Assert.That(row.rarities, Is.Empty);
+        }
+
+        [Test]
+        public void PrivateFieldWithoutSerializeFieldIsNotMapped()
+        {
+            var values = new Dictionary<string, object> { { "hidden", 5 } };
+
+            var ex = Assert.Throws<ArgumentException>(() =>
+                RowMapper.Map(typeof(CodeRow), new SheetRow(2, "knight", values), "Units"));
+
+            Assert.That(ex.Message, Does.Contain("no serialized field 'hidden'"));
+        }
+
+        [Test]
+        public void UnknownEnumInListThrows()
+        {
+            var values = new Dictionary<string, object> { { "rarities", new[] { "Legendary" } } };
+
+            Assert.Throws<ArgumentException>(() => RowMapper.Map(typeof(CodeRow), new SheetRow(2, "knight", values)));
+        }
+
         [Test]
         public void RejectsNullArguments()
         {

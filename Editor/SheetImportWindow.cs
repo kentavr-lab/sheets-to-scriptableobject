@@ -19,6 +19,9 @@ namespace Kentavr.SheetsToSO.Editor
         private const string MenuPath = "Window/Sheets to SO/Import";
         private const string Title = "Sheets to SO";
 
+        private const string GenerateCodeLabel = "Генерировать код";
+        private const float TableTypeWidth = 200;
+
         private static readonly string[] MonoFonts = { "Consolas", "Menlo", "DejaVu Sans Mono", "Courier New" };
 
         private SheetSourceLoader _loader;
@@ -41,6 +44,9 @@ namespace Kentavr.SheetsToSO.Editor
         private Font _monoFont;
         private GUIStyle _monoStyle;
 
+        // Full names of the SheetTable<> subclasses of the project; refreshed in OnEnable, i.e. after each recompile.
+        private List<string> _tableTypes = new List<string>();
+
         private bool IsBusy => _busyText != null;
 
         private bool CanApply => !IsBusy && _check != null && !_check.HasErrors && _loaded != null && _loaded.Errors.Count == 0;
@@ -56,6 +62,7 @@ namespace Kentavr.SheetsToSO.Editor
             titleContent = new GUIContent(Title);
             _loader = new SheetSourceLoader();
             _apiKey = ApiKeyStore.Load();
+            _tableTypes = SheetAssetImporter.FindTableTypes().Select(type => type.FullName).ToList();
             SheetAssetImporter.ImportContinued += OnImportContinued;
         }
 
@@ -137,7 +144,7 @@ namespace Kentavr.SheetsToSO.Editor
             if (GUILayout.Button("Обновить список вкладок"))
                 RefreshGoogleSheets(settings);
 
-            DrawToggles(settings.googleSheets, "Нажмите «Обновить список вкладок».");
+            DrawToggles(settings, settings.googleSheets, name => name, "Нажмите «Обновить список вкладок».");
         }
 
         private void DrawExport(SheetImportSettings settings)
@@ -159,6 +166,7 @@ namespace Kentavr.SheetsToSO.Editor
                     GUILayout.Space(22);
                     EditorGUILayout.LabelField("Имя вкладки", EditorStyles.miniBoldLabel);
                     EditorGUILayout.LabelField("gid", EditorStyles.miniBoldLabel, GUILayout.Width(110));
+                    EditorGUILayout.LabelField("Тип таблицы", EditorStyles.miniBoldLabel, GUILayout.Width(TableTypeWidth));
                     GUILayout.Space(28);
                 }
             }
@@ -172,6 +180,7 @@ namespace Kentavr.SheetsToSO.Editor
                     sheet.selected = EditorGUILayout.Toggle(sheet.selected, GUILayout.Width(18));
                     sheet.name = EditorGUILayout.TextField(sheet.name);
                     sheet.gid = EditorGUILayout.TextField(sheet.gid, GUILayout.Width(110));
+                    DrawTableType(settings, sheet.name);
                     if (GUILayout.Button("−", GUILayout.Width(24)))
                         remove = i;
                 }
@@ -212,10 +221,12 @@ namespace Kentavr.SheetsToSO.Editor
             if (GUILayout.Button("Обновить список файлов"))
                 RefreshCsvFiles(settings);
 
-            DrawToggles(settings.csvFiles, "Выберите папку с файлами .csv / .tsv.", CsvFolderSource.SheetName);
+            // Sheets of CSV files are named without the extension, as SheetSourceLoader.LoadCsvFolder names them.
+            DrawToggles(settings, settings.csvFiles, CsvFolderSource.SheetName, "Выберите папку с файлами .csv / .tsv.");
         }
 
-        private void DrawToggles(List<SheetToggle> list, string emptyText, Func<string, string> label = null)
+        private void DrawToggles(SheetImportSettings settings, List<SheetToggle> list, Func<string, string> sheetName,
+            string emptyText)
         {
             if (list.Count == 0)
             {
@@ -231,8 +242,47 @@ namespace Kentavr.SheetsToSO.Editor
 
             foreach (var item in list)
             {
-                var text = label?.Invoke(item.name) ?? item.name;
-                item.selected = EditorGUILayout.ToggleLeft(new GUIContent(text, item.name), item.selected);
+                var sheet = item.name != null ? sheetName(item.name) : null;
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    // The toggle shows the sheet name; the stored name (file name for CSV) is in the tooltip.
+                    item.selected = EditorGUILayout.ToggleLeft(new GUIContent(sheet ?? item.name, item.name),
+                        item.selected);
+                    DrawTableType(settings, sheet);
+                }
+            }
+        }
+
+        // "Тип таблицы" of a sheet: code generation or a SheetTable<> subclass of the project (schema from code).
+        // Changes set GUI.changed, so OnGUI saves the settings and resets the check.
+        private void DrawTableType(SheetImportSettings settings, string sheet)
+        {
+            var current = settings.GetTableType(sheet);
+            var labels = new List<string>(_tableTypes.Count + 2) { GenerateCodeLabel };
+            labels.AddRange(_tableTypes);
+
+            var index = 0;
+            if (current.Length > 0)
+            {
+                index = _tableTypes.IndexOf(current) + 1;
+                if (index == 0)
+                {
+                    // The type is gone from the project: keep the binding, the check reports the error.
+                    labels.Add(current + " (не найден)");
+                    index = labels.Count - 1;
+                }
+            }
+
+            using (new EditorGUI.DisabledScope(string.IsNullOrEmpty(sheet)))
+            {
+                var selected = EditorGUILayout.Popup(index, labels.ToArray(), GUILayout.Width(TableTypeWidth));
+                if (selected == index)
+                    return;
+
+                if (selected == 0)
+                    settings.SetTableType(sheet, string.Empty);
+                else if (selected <= _tableTypes.Count)
+                    settings.SetTableType(sheet, _tableTypes[selected - 1]);
             }
         }
 
@@ -457,6 +507,8 @@ namespace Kentavr.SheetsToSO.Editor
                 return;
             EndLoading();
 
+            foreach (var sheet in loaded.Sheets)
+                sheet.tableType = settings.GetTableType(sheet.name);
             request.sheets = loaded.Sheets;
             _check = SheetAssetImporter.Check(request);
             // Nothing loaded because of load errors: they already say why, the empty set error repeats them.
