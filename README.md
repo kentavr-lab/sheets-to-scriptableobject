@@ -1,27 +1,29 @@
 # Sheets to ScriptableObject
 
-Unity-пакет для импорта таблиц Google Sheets и CSV в типизированные ScriptableObject-конфиги. Типы столбцов задаются в заголовке таблицы (тогда классы генерируются) или в вашем коде. Перед импортом данные проверяются, а изменения показываются в виде diff — применяются только после подтверждения.
+[Русская версия](README.ru.md)
 
-## Требования
+A Unity package that imports Google Sheets and CSV tables into typed ScriptableObject configs. Column types are defined in the sheet header (then classes are generated) or in your code. Data is checked before import, and changes are shown as a diff — they are applied only after confirmation.
 
-- Unity 2022.3 LTS или новее.
-- Сторонних зависимостей нет (ни Odin, ни SDK Google, ни Newtonsoft).
+## Requirements
 
-## Подключение
+- Unity 2022.3 LTS or newer.
+- No third-party dependencies (no Odin, no Google SDK, no Newtonsoft).
 
-**По git URL.** *Window → Package Manager → + → Add package from git URL…* и вставьте:
+## Installation
+
+**By git URL.** *Window → Package Manager → + → Add package from git URL…* and paste:
 
 ```
 https://github.com/kentavr-lab/sheets-to-scriptableobject.git
 ```
 
-Конкретная версия — с тегом:
+A specific version, with a tag:
 
 ```
 https://github.com/kentavr-lab/sheets-to-scriptableobject.git#v0.3.0
 ```
 
-**Через `Packages/manifest.json`.** Добавьте строку в `dependencies`:
+**Via `Packages/manifest.json`.** Add a line to `dependencies`:
 
 ```json
 {
@@ -31,13 +33,13 @@ https://github.com/kentavr-lab/sheets-to-scriptableobject.git#v0.3.0
 }
 ```
 
-Чтобы закрепить версию, допишите к URL `#v0.3.0`.
+To pin a version, append `#v0.3.0` to the URL.
 
-**С диска.** Склонируйте репозиторий, затем *Package Manager → + → Add package from disk…* и выберите `package.json` в корне клона.
+**From disk.** Clone the repository, then *Package Manager → + → Add package from disk…* and select `package.json` in the root of the clone.
 
-## Использование
+## Usage
 
-Класс строки — `[Serializable]` с `ISheetRow`, таблица — наследник `SheetTable<>`:
+The row class is `[Serializable]` with `ISheetRow`; the table is a subclass of `SheetTable<>`:
 
 ```csharp
 using System;
@@ -58,7 +60,7 @@ public class UnitRow : ISheetRow
 public sealed class UnitsTable : SheetTable<UnitRow> {}
 ```
 
-Поиск по `id` (регистр важен):
+Lookup by `id` (case-sensitive):
 
 ```csharp
 if (unitsTable.TryGet("knight", out var knight))
@@ -67,20 +69,20 @@ if (unitsTable.TryGet("knight", out var knight))
 }
 ```
 
-Строки без `id` в поиск не попадают; при повторе `id` используется первая строка. Об обоих случаях пишется ошибка в консоль со ссылкой на ассет.
+Rows without an `id` are not included in the lookup; if an `id` is repeated, the first row is used. In both cases an error with a link to the asset is logged to the console.
 
-Строка связанной таблицы — через свойство, которое импортёр генерирует для каждого столбца `ref<X>` (имя столбца с заглавной буквы):
+A row of a referenced table is available through a property that the importer generates for each `ref<X>` column (the column name capitalized):
 
 ```csharp
-Weapons w = unitsTable.Get("knight").Weapon; // строка из таблицы Weapons или null
-IReadOnlyList<Items> drops = unitsTable.Get("knight").Drops; // для ref<Items>[]
+Weapons w = unitsTable.Get("knight").Weapon; // row of the Weapons table or null
+IReadOnlyList<Items> drops = unitsTable.Get("knight").Drops; // for ref<Items>[]
 ```
 
-Поле `weapon` по-прежнему хранит `id`. Импортёр сам связывает ассет `Units.asset` с `Weapons.asset` из той же папки ассетов. Пустой или ненайденный `id` и несвязанная таблица дают `null` (старые ассеты — до повторного импорта). Для своих классов строк, как `UnitRow` выше, и в режиме «схема из кода» свойства не генерируются. Подробности и правила имён — в [формате данных](Documentation~/data-format.md#свойства-refx).
+The `weapon` field still stores the `id`. The importer links the `Units.asset` asset to `Weapons.asset` from the same assets folder by itself. An empty or missing `id` and an unlinked table give `null` (old assets — until reimported). For your own row classes, like `UnitRow` above, and in schema from code mode, the properties are not generated. Details and naming rules are in the [data format](Documentation~/data-format.md#refx-properties).
 
-### Выпадающий список `id` для своих полей
+### `id` dropdown for your own fields
 
-Своё поле, которое хранит `id` строки таблицы (в `MonoBehaviour`, префабе, своём ScriptableObject), можно пометить атрибутом `[SheetRef]` — в инспекторе вместо ввода текста будет список `id` из ассета таблицы:
+Your own field that stores a table row `id` (in a `MonoBehaviour`, a prefab, your own ScriptableObject) can be marked with the `[SheetRef]` attribute — instead of a text input, the Inspector shows a list of `id` values from the table asset:
 
 ```csharp
 using System.Collections.Generic;
@@ -90,77 +92,77 @@ using UnityEngine;
 public class Unit : MonoBehaviour
 {
     [SheetRef(typeof(WeaponsTable))] public string weaponId;
-    [SheetRef(typeof(WeaponsTable))] public string[] spareWeapons;     // у каждого элемента свой список
+    [SheetRef(typeof(WeaponsTable))] public string[] spareWeapons;     // each element has its own list
     [SheetRef(typeof(ItemsTable))] public List<string> drops;
 
-    // В проекте несколько ассетов WeaponsTable — указать нужный
+    // The project has several WeaponsTable assets — specify the one to use
     [SheetRef(typeof(WeaponsTable), Asset = "Assets/Data/Boss/Weapons.asset")] public string bossWeaponId;
 }
 ```
 
-- Тип в атрибуте — неабстрактный наследник `SheetTable<>`; поле — `string`, `string[]` или `List<string>`. Атрибут лежит в рантайм-сборке и не тянет редактор в билд.
-- Ассет ищется по точному типу (наследники не считаются), в `Assets/` и `Packages/`. Если ассетов несколько и `Asset` не указан, берётся первый по пути, а над полем — предупреждение с этим путём. Если `Asset` указан, используется только он; нет ассета по этому пути — ошибка. Путь в `Asset` сравнивается с учётом регистра и должен совпадать с путём в окне Project (`Assets/Data/Weapons.asset`, а не `Assets/data/weapons.asset`).
-- Список: первый пункт `(пусто)`, затем `id` в порядке строк таблицы (без пустых и повторов), сверху строка поиска. Выбор отменяется `Ctrl+Z`.
-- Пустое значение допустимо и показывается как `(пусто)`. Значение, которого нет в таблице, показывается красным с подсказкой и не стирается.
-- Нет ассета таблицы, неверный тип в атрибуте — обычное текстовое поле с ошибкой над ним, значение можно править руками. Атрибут на поле не `string` — обычное поле и сообщение, что нужен `string`.
+- The type in the attribute is a non-abstract subclass of `SheetTable<>`; the field is `string`, `string[]` or `List<string>`. The attribute lives in the runtime assembly and does not pull the editor into the build.
+- The asset is searched by exact type (subclasses do not count), in `Assets/` and `Packages/`. If there are several assets and `Asset` is not specified, the first one by path is used, and a warning with that path is shown above the field. If `Asset` is specified, only it is used; if there is no asset at that path, it is an error. The path in `Asset` is compared case-sensitively and must match the path in the Project window (`Assets/Data/Weapons.asset`, not `Assets/data/weapons.asset`).
+- The list: the first item is `(empty)` / «(пусто)», then the `id` values in table row order (without empty ones and duplicates), with a search field on top. A selection is undone with `Ctrl+Z`.
+- An empty value is allowed and is shown as `(empty)` / «(пусто)». A value that is not in the table is shown in red with a tooltip and is not erased.
+- No table asset or a wrong type in the attribute — a plain text field with an error above it; the value can be edited by hand. The attribute on a non-`string` field — a plain field and a message that `string` is required.
 
-**Проверка в Unity.** Автотестов на редакторскую часть нет, проверяется вручную:
+**Checking in Unity.** There are no automated tests for the editor part; it is checked manually:
 
-1. `MonoBehaviour` в префабе с `[SheetRef(typeof(WeaponsTable))] public string weaponId;` — поле показано кнопкой-списком; в списке `(пусто)` и все `id` из `Weapons.asset` в порядке строк; поиск по части `id` фильтрует список.
-2. Выбор `id` записывается в поле, отменяется `Ctrl+Z`, остаётся в префабе после сохранения.
-3. Пустое значение — `(пусто)` без ошибки.
-4. Значение, которого нет в таблице (вписать в Debug-режиме инспектора или удалить строку из таблицы и переимпортировать), — красное с подсказкой; после открытия и закрытия списка без выбора значение то же.
-5. `string[]` и `List<string>` с атрибутом — у каждого элемента свой список; добавление и удаление элементов работает как обычно.
-6. Такое же поле в своём ScriptableObject работает так же, как в префабе.
-7. Два ассета `WeaponsTable`: без `Asset` — предупреждение над полем с путём используемого ассета; с `Asset = "<путь ко второму>"` — список из второго ассета без предупреждения; неверный путь в `Asset` — ошибка у поля, ввод текста остаётся.
-8. Нет ни одного ассета `WeaponsTable` — текстовое поле с ошибкой, значение можно править.
-9. Атрибут на поле `int` — сообщение, что нужен `string`, без исключений в Console.
-10. Проект собирается без ошибок и предупреждений от пакета, в том числе билд плеера.
+1. A `MonoBehaviour` in a prefab with `[SheetRef(typeof(WeaponsTable))] public string weaponId;` — the field is shown as a dropdown button; the list contains `(empty)` / «(пусто)» and all `id` values from `Weapons.asset` in row order; searching by part of an `id` filters the list.
+2. Selecting an `id` writes it to the field, is undone with `Ctrl+Z`, and stays in the prefab after saving.
+3. An empty value — `(empty)` / «(пусто)» without an error.
+4. A value that is not in the table (type it in the Debug mode of the Inspector, or delete the row from the sheet and reimport) — red with a tooltip; after opening and closing the list without selecting, the value is the same.
+5. `string[]` and `List<string>` with the attribute — each element has its own list; adding and removing elements works as usual.
+6. The same field in your own ScriptableObject works the same as in a prefab.
+7. Two `WeaponsTable` assets: without `Asset` — a warning above the field with the path of the asset used; with `Asset = "<path to the second>"` — the list from the second asset without a warning; a wrong path in `Asset` — an error at the field, text input remains.
+8. No `WeaponsTable` asset at all — a text field with an error; the value can be edited.
+9. The attribute on an `int` field — a message that `string` is required, without exceptions in the Console.
+10. The project builds without errors or warnings from the package, including a player build.
 
-### Окно импорта
+### Import window
 
-*Window → Sheets to SO → Import*. Сверху вниз:
+*Window → Sheets to SO → Import*. From top to bottom:
 
-- **Источник:**
-  - *Google API* — ID таблицы и API-ключ (Google Sheets API, таблица открыта «всем, у кого есть ссылка — просмотр»). «Обновить список вкладок» читает вкладки таблицы.
-  - *Export* — ID таблицы и список вкладок вручную: имя вкладки и её `gid` (число после `gid=` в адресе вкладки). Ключ не нужен; каждая вкладка грузится по CSV-ссылке экспорта.
-  - *CSV-файлы* — папка на диске; каждый `.csv`/`.tsv` — вкладка с именем файла без расширения.
-- **Папка ассетов, папка кода, namespace** — по умолчанию `Assets/Data`, `Assets/Data/Generated`, `SheetsData`.
-- **Вкладки** с галочками; вкладки и файлы на `#` по умолчанию сняты. Кнопки «Все» / «Ничего».
-- **«Тип таблицы»** у каждой вкладки: «Генерировать код» или свой наследник `SheetTable<>` из проекта — тогда код для вкладки не генерируется, данные разбираются по полям вашего класса строки (см. [«Схема из кода»](Documentation~/data-format.md#схема-из-кода)).
-- **«Проверить»** загружает отмеченные вкладки и проверяет их, ничего не записывая: ошибки источника и данных с адресами (`Units!C5: …`), предупреждения (например, `,` в числах при экспорте) и diff относительно последнего применённого импорта в эту папку ассетов. Во время загрузки есть «Отмена»; закрытие окна тоже отменяет загрузку.
-- **«Применить»** активна только после проверки без ошибок и пока не менялись настройки и галочки. Импортирует те же загруженные данные, без повторной загрузки. Если в diff есть удалённые строки или вкладки, сначала спрашивает подтверждение. Итог — в окне и в Console; если код изменился, ассеты обновятся после перекомпиляции скриптов. Ассеты, строки которых не изменились, не пересохраняются и идут в отчёте как `Unchanged assets`.
+- **Source** («Источник»):
+  - *Google API* — spreadsheet ID and API key (Google Sheets API, the spreadsheet is shared as *Anyone with the link — Viewer*). **Refresh sheet list** («Обновить список вкладок») reads the spreadsheet's sheets.
+  - *Export* — spreadsheet ID and a manual list of sheets: the sheet name and its `gid` (the number after `gid=` in the sheet URL). No key is needed; each sheet is loaded by the CSV export link.
+  - *CSV files* («CSV-файлы») — a folder on disk; each `.csv`/`.tsv` is a sheet named after the file without extension.
+- **Assets folder, code folder** («Папка ассетов», «Папка кода»), **Namespace** — by default `Assets/Data`, `Assets/Data/Generated`, `SheetsData`.
+- **Sheets** («Вкладки») with checkboxes; sheets and files starting with `#` are unchecked by default. **All** / **None** («Все» / «Ничего») buttons.
+- **Table type** («Тип таблицы») for each sheet: *Generate code* («Генерировать код») or your own `SheetTable<>` subclass from the project — then no code is generated for the sheet, and the data is parsed by the fields of your row class (see [Schema from code](Documentation~/data-format.md#schema-from-code)).
+- **Check** («Проверить») loads the selected sheets and checks them without writing anything: source and data errors with addresses (`Units!C5: …`), warnings (for example, `,` in numbers in the export) and the diff against the last applied import into this assets folder. During loading there is **Cancel** («Отмена»); closing the window also cancels loading.
+- **Apply** («Применить») is active only after a check without errors and while the settings and checkboxes have not changed. It imports the same loaded data, without loading again. If the diff has removed rows or sheets, it asks for confirmation first. The result is shown in the window and in the Console; if the code has changed, the assets are updated after scripts are recompiled. Assets whose rows have not changed are not re-saved and are listed in the report as `Unchanged assets`.
 
-**Где хранятся настройки.** API-ключ — в настройках пользователя редактора (`EditorPrefs`, ключ `Kentavr.SheetsToSO.ApiKey`): вне проекта и git, открытым текстом в реестре / plist пользователя. В отчёты, лог и файлы проекта ключ не попадает; кнопка «Очистить» удаляет его. Остальные настройки окна — в `UserSettings/Kentavr.SheetsToSO/ImportWindow.asset` (папка `UserSettings/` вне `Assets/`, в стандартном Unity `.gitignore`).
+**Where settings are stored.** The API key is stored in the editor user settings (`EditorPrefs`, key `Kentavr.SheetsToSO.ApiKey`): outside the project and git, in plain text in the user's registry / plist. The key does not get into reports, the log or project files; the **Clear** («Очистить») button removes it. Other window settings are in `UserSettings/Kentavr.SheetsToSO/ImportWindow.asset` (the `UserSettings/` folder is outside `Assets/` and in the standard Unity `.gitignore`).
 
-### Импорт CSV из папки (временная команда)
+### Import a CSV folder (temporary command)
 
-Основной способ импорта — окно выше; команда оставлена на время. Правый клик по папке в окне Project → *Sheets to SO → Import CSV folder here…* → выберите папку на диске с `.csv`/`.tsv`. Каждый файл — вкладка (имя файла без расширения; файлы, начинающиеся с `#`, пропускаются). Ассеты создаются в выбранной папке (`Units.asset`), код — в её подпапке `Generated/`, namespace — `SheetsData`. Повторный запуск обновляет ассеты на месте. Подробности — в разделе «Импорт» [формата данных](Documentation~/data-format.md).
+The main way to import is the window above; the command is kept for the time being. Right-click a folder in the Project window → *Sheets to SO → Import CSV folder here…* → select a folder on disk with `.csv`/`.tsv` files. Each file is a sheet (the file name without extension; files starting with `#` are skipped). Assets are created in the selected folder (`Units.asset`), code in its `Generated/` subfolder, the namespace is `SheetsData`. Running it again updates the assets in place. Details are in the [Import](Documentation~/data-format.md#import) section of the data format.
 
-## Консольная проверка (CI)
+## Command-line check (CI)
 
-Приложение `Cli~/` загружает вкладки, разбирает их и проверяет ссылки и enum тем же кодом ядра, что и редактор, и печатает отчёт в консоль. Нужен .NET SDK 8.0 или новее. Из корня репозитория:
+The `Cli~/` application loads sheets, parses them and checks references and enums with the same core code as the editor, and prints a report to the console. It requires .NET SDK 8.0 or newer. From the repository root:
 
 ```
 dotnet run --project "Cli~" -- --source csv --file Units.csv
 ```
 
-Три источника:
+Three sources:
 
 ```
-# CSV/TSV-файлы: одна вкладка = один файл, имя вкладки — имя файла без расширения; .tsv — с табуляцией
+# CSV/TSV files: one sheet = one file, the sheet name is the file name without extension; .tsv is tab-separated
 dotnet run --project "Cli~" -- --source csv --file Data/Units.csv --file Data/Weapons.tsv
 
-# Google Sheets API: без --sheet проверяются все вкладки, кроме начинающихся с #
+# Google Sheets API: without --sheet, all sheets are checked except those starting with #
 dotnet run --project "Cli~" -- --source api --spreadsheet <ID> [--sheet Units --sheet Weapons]
 
-# Экспорт CSV по ссылке: у ссылки нет имени вкладки, поэтому вкладка задаётся как имя=gid
+# CSV export by link: the link has no sheet name, so a sheet is given as name=gid
 dotnet run --project "Cli~" -- --source export --spreadsheet <ID> --sheet Units=0 --sheet Weapons=123456789
 ```
 
-API-ключ для `--source api` берётся из переменной окружения `SHEETS_TO_SO_API_KEY` (другое имя — `--api-key-env <ИМЯ>`). В аргументах ключ не принимается и в вывод не попадает. Справка — `--help`.
+The API key for `--source api` is taken from the `SHEETS_TO_SO_API_KEY` environment variable (another name — `--api-key-env <NAME>`). The key is not accepted in arguments and does not get into the output. Help — `--help`.
 
-Отчёт — по строке на проблему, в конце итог:
+The report has one line per problem and a summary at the end:
 
 ```
 error: Units!C2: Column 'hp': 'abc' is not a valid int
@@ -168,38 +170,38 @@ error: Units!D2: Column 'weapon': 'axe': no row with this id in sheet 'Weapons'
 Sheets: 2, errors: 2, warnings: 0
 ```
 
-| Код выхода | Значение |
+| Exit code | Meaning |
 |---|---|
-| `0` | Ошибок нет (предупреждения, например о `,` в числах, на код не влияют). |
-| `1` | Ошибки данных: заголовок, ячейки, `id`, синтаксис CSV, `ref`/`enum`. |
-| `2` | Ошибки аргументов или доступа: неизвестный ключ, нет файла, не задан ключ API, ответ 403, HTML вместо CSV. Сообщение — в stderr, разбор не выполняется. |
+| `0` | No errors (warnings, for example about `,` in numbers, do not affect the code). |
+| `1` | Data errors: header, cells, `id`, CSV syntax, `ref`/`enum`. |
+| `2` | Argument or access errors: unknown option, missing file, API key not set, 403 response, HTML instead of CSV. The message goes to stderr; parsing is not performed. |
 
-## Документация
+## Documentation
 
-- [Формат данных](Documentation~/data-format.md) — источники, правила таблицы, типы, что считается ошибкой.
+- [Data format](Documentation~/data-format.md) — sources, sheet rules, types, what counts as an error.
 
-## Структура
+## Structure
 
-| Сборка | Папка | За что отвечает |
+| Assembly | Folder | Responsibility |
 |---|---|---|
-| `Kentavr.SheetsToSO.Core` | `Runtime/Core/` | Весь конвейер без Unity: источники, разбор, проверка, diff. Не ссылается на `UnityEngine`/`UnityEditor` и сторонние библиотеки, поэтому работает в редакторе, в консоли и в CI. |
-| `Kentavr.SheetsToSO` | `Runtime/` | Рантайм: базовый ScriptableObject таблицы с поиском по `id`, атрибут `[SheetRef]`. |
-| `Kentavr.SheetsToSO.Editor` | `Editor/` | Только редактор: окно импорта, кодогенерация, хранение API-ключа, drawer `[SheetRef]`. |
-| — | `Cli~/` | Консольное приложение `sheets-to-so` для CI: проверка вкладок с кодом выхода. Ссылается на ядро через `Tests~/Core`, в пакет для Unity не попадает. |
+| `Kentavr.SheetsToSO.Core` | `Runtime/Core/` | The whole pipeline without Unity: sources, parsing, checks, diff. Does not reference `UnityEngine`/`UnityEditor` or third-party libraries, so it works in the editor, in the console and in CI. |
+| `Kentavr.SheetsToSO` | `Runtime/` | Runtime: the base table ScriptableObject with lookup by `id`, the `[SheetRef]` attribute. |
+| `Kentavr.SheetsToSO.Editor` | `Editor/` | Editor only: import window, code generation, API key storage, the `[SheetRef]` drawer. |
+| — | `Cli~/` | The `sheets-to-so` console application for CI: checks sheets with an exit code. References the core via `Tests~/Core`; not included in the Unity package. |
 
-Папки `Cli~/`, `Documentation~/` и `Tests~/` Unity не импортирует.
+Unity does not import the `Cli~/`, `Documentation~/` and `Tests~/` folders.
 
-## Тесты
+## Tests
 
-Ядро тестируется без Unity: проект `Tests~/Core` компилирует те же исходники из `Runtime/Core/`, что и Unity. Из корня репозитория:
+The core is tested without Unity: the `Tests~/Core` project compiles the same sources from `Runtime/Core/` as Unity does. From the repository root:
 
 ```
 dotnet test "Tests~/Core.Tests"
 dotnet test "Tests~/Cli.Tests"
 ```
 
-Нужен .NET SDK 8.0 или новее.
+Requires .NET SDK 8.0 or newer.
 
-## Лицензия
+## License
 
 [MIT](LICENSE)
