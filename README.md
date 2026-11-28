@@ -194,7 +194,7 @@ Sheets: 2, errors: 2, warnings: 0
 | `Kentavr.SheetsToSO.Editor` | `Editor/` | Editor only: import window, code generation, API key storage, the `[SheetRef]` drawer. |
 | — | `Cli~/` | The `sheets-to-so` console application for CI: checks sheets with an exit code. References the core via `Tests~/Core`; not included in the Unity package. |
 
-Unity does not import the `Cli~/`, `Documentation~/`, `Tests~/` and `Tools~/` folders. `Tools~/release.py` builds the `.unitypackage` for releases.
+Unity does not import the `Cli~/`, `Documentation~/`, `Tests~/` and `Tools~/` folders. `Tools~/release.py` builds the `.unitypackage` for releases; besides these folders, it leaves out `Tests/` (the Unity tests of the package).
 
 ## Tests
 
@@ -207,6 +207,8 @@ dotnet test "Tests~/Editor.Tests"
 ```
 
 Requires .NET SDK 8.0 or newer.
+
+Unity EditMode tests (editor language, the Assets menu item, the import window) are in `Tests/Editor/`: add `"testables": ["com.kentavr-lab.sheets-to-scriptableobject"]` to `Packages/manifest.json` of the project and open *Window → General → Test Runner → EditMode*.
 
 ## License
 

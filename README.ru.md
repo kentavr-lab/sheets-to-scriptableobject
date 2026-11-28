@@ -67,6 +67,10 @@ if (unitsTable.TryGet("knight", out var knight))
 - [Data format](Documentation~/data-format.md) — источники, правила таблицы, типы, что считается ошибкой.
 - [Changelog](CHANGELOG.md).
 
+## Тесты
+
+`dotnet test` — в разделе [Tests](README.md#tests). Unity EditMode-тесты лежат в `Tests/Editor/` и не входят в `.unitypackage` (как и `Cli~/`, `Documentation~/`, `Tests~/`, `Tools~/`): добавьте `"testables": ["com.kentavr-lab.sheets-to-scriptableobject"]` в `Packages/manifest.json` проекта и откройте *Window → General → Test Runner → EditMode*.
+
 ## Лицензия
 
 [MIT](LICENSE)
