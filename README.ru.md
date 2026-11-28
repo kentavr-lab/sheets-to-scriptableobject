@@ -11,11 +11,15 @@ Unity-пакет для импорта таблиц Google Sheets и CSV в ти
 
 ## Подключение
 
-*Window → Package Manager → + → Add package from git URL…* и вставьте:
+**По git-ссылке.** *Window → Package Manager → + → Add package from git URL…* и вставьте:
 
 ```
-https://github.com/kentavr-lab/sheets-to-scriptableobject.git#v0.3.0
+https://github.com/kentavr-lab/sheets-to-scriptableobject.git#v0.4.0
 ```
+
+**Из `.unitypackage`.** Скачайте `SheetsToSO-<версия>.unitypackage` со страницы [Releases](https://github.com/kentavr-lab/sheets-to-scriptableobject/releases), затем *Assets → Import Package → Custom Package…* и выберите файл. Файлы лягут в `Assets/SheetsToSO/`. Для обновления удалите `Assets/SheetsToSO/` и импортируйте новый `.unitypackage`.
+
+> Ставьте пакет только одним способом. Пакет через Package Manager и `.unitypackage` в одном проекте дают дубли классов и GUID.
 
 Другие способы (через `Packages/manifest.json`, с диска) — в разделе [Installation](README.md#installation).
 
