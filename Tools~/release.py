@@ -27,7 +27,8 @@ INSTALL_ROOT = "Assets/SheetsToSO"
 PACKAGE_FILE_NAME = "SheetsToSO-{version}.unitypackage"
 FIXED_MTIME = 315532800  # 1980-01-01, the same for every build
 GUID_RE = re.compile(r"^guid:\s*([0-9a-fA-F]{32})\s*$", re.MULTILINE)
-DEFAULT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEV_ONLY_ROOTS = ("Tests",)  # package development only, not for Assets/ of a user
+DEFAULT_ROOT =os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class ReleaseError(Exception):
@@ -47,7 +48,14 @@ def check_version(root, version):
 
 
 def is_excluded(path):
-    return any(part.startswith(".") or part.endswith("~") for part in path.split("/"))
+    """Whether a tracked path stays out of the .unitypackage: hidden (".*"), Unity-ignored ("*~")
+    and development-only top-level folders (DEV_ONLY_ROOTS, e.g. the Unity tests in Tests/),
+    with their own .meta (Tests.meta). Excluded paths are not checked for .meta files."""
+    parts = path.split("/")
+    top = parts[0][:-len(".meta")] if len(parts) == 1 and parts[0].endswith(".meta") else parts[0]
+    if top in DEV_ONLY_ROOTS:
+        return True
+    return any(part.startswith(".") or part.endswith("~") for part in parts)
 
 
 def tracked_files(root):
