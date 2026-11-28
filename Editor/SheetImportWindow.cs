@@ -51,9 +51,11 @@ namespace Kentavr.SheetsToSO.Editor
         [SerializeField] private bool _waitingForReload;
         [SerializeField] private Vector2 _scroll;
 
-        private Font _monoFont;
-        private GUIStyle _monoStyle;
-        private GUIStyle _hintStyle;
+        // Lazy GUI caches. Not serialized: otherwise Unity restores them after a domain reload as empty styles
+        // (no wordWrap, no font) and the lazy init never runs again.
+        [NonSerialized] private Font _monoFont;
+        [NonSerialized] private GUIStyle _monoStyle;
+        [NonSerialized] private GUIStyle _hintStyle;
 
         // Full names of the SheetTable<> subclasses of the project; refreshed in OnEnable, i.e. after each recompile.
         private List<string> _tableTypes = new List<string>();
