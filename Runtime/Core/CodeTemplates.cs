@@ -34,6 +34,13 @@ namespace Kentavr.SheetsToSO.Core
         /// <summary>Placeholder for the row class name in the table class template.</summary>
         public const string RowClassNamePlaceholder = "{{RowClassName}}";
 
+        /// <summary>
+        /// Placeholder for the <c>ref&lt;X&gt;</c> properties in the table class template. Empty when the sheet has
+        /// no <c>ref</c> columns; otherwise each property starts with an empty line and a comment, 8-space indented,
+        /// so the placeholder goes right after the last member, on the same line. Without it no properties are generated.
+        /// </summary>
+        public const string RefPropertiesPlaceholder = "{{RefProperties}}";
+
         /// <summary>Default row class template.</summary>
         public const string DefaultRowClass =
             "{{Header}}\n" +
@@ -58,15 +65,20 @@ namespace Kentavr.SheetsToSO.Core
             "}\n";
 
         /// <summary>
-        /// Default table class template: makes the row class an <c>ISheetRow</c> and closes <c>SheetTable&lt;&gt;</c>.
+        /// Default table class template: makes the row class an <c>ISheetRow</c> that knows its table, adds the
+        /// <c>ref&lt;X&gt;</c> properties and closes <c>SheetTable&lt;&gt;</c>.
         /// </summary>
         public const string DefaultTableClass =
             "{{Header}}\n" +
             "namespace {{Namespace}}\n" +
             "{\n" +
-            "    public sealed partial class {{RowClassName}} : global::Kentavr.SheetsToSO.Core.ISheetRow\n" +
+            "    public sealed partial class {{RowClassName}} : global::Kentavr.SheetsToSO.Core.ISheetRow, global::Kentavr.SheetsToSO.ISheetTableRow\n" +
             "    {\n" +
+            "        [global::System.NonSerialized] private global::Kentavr.SheetsToSO.SheetTableBase __table;\n" +
+            "\n" +
             "        string global::Kentavr.SheetsToSO.Core.ISheetRow.Id => id;\n" +
+            "\n" +
+            "        void global::Kentavr.SheetsToSO.ISheetTableRow.SetTable(global::Kentavr.SheetsToSO.SheetTableBase table) => __table = table;{{RefProperties}}\n" +
             "    }\n" +
             "\n" +
             "    public sealed class {{TableClassName}} : global::Kentavr.SheetsToSO.SheetTable<{{RowClassName}}>\n" +
