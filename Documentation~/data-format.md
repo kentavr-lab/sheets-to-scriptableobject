@@ -1,49 +1,49 @@
-# Формат данных
+# Data format
 
-Формат, который поддерживает пакет.
+The format supported by the package.
 
-Версия формата: **1** (`Kentavr.SheetsToSO.Core.FormatInfo.Version`).
+Format version: **1** (`Kentavr.SheetsToSO.Core.FormatInfo.Version`).
 
-## Источники
+## Sources
 
-| Источник | Как подключается | Примечание |
+| Source | How it connects | Note |
 |---|---|---|
-| Google Sheets API v4 + API-ключ | `values:batchGet`, `valueRenderOption=UNFORMATTED_VALUE`, `dateTimeRenderOption=SERIAL_NUMBER` | **Рекомендуемый.** Таблица открыта «всем, у кого есть ссылка — просмотр». Даты и время приходят серийным числом (например, `46349.5`), `bool` — как `TRUE` / `FALSE`. |
-| Экспорт CSV по ссылке | `https://docs.google.com/spreadsheets/d/<ID>/export?format=csv&gid=<GID>` | Одна вкладка на ссылку. |
-| Локальные файлы | CSV или TSV | Один файл = одна вкладка. |
+| Google Sheets API v4 + API key | `values:batchGet`, `valueRenderOption=UNFORMATTED_VALUE`, `dateTimeRenderOption=SERIAL_NUMBER` | **Recommended.** The spreadsheet is shared as *Anyone with the link — Viewer*. Dates and times arrive as serial numbers (for example, `46349.5`), `bool` as `TRUE` / `FALSE`. |
+| CSV export by link | `https://docs.google.com/spreadsheets/d/<ID>/export?format=csv&gid=<GID>` | One sheet per link. |
+| Local files | CSV or TSV | One file = one sheet. |
 
-- Можно загрузить всю таблицу или только выбранные вкладки.
-- API-ключ хранится вне `Assets/` и вне git.
-- Пакет не использует SDK Google и Odin.
+- You can load the whole spreadsheet or only selected sheets.
+- The API key is stored outside `Assets/` and outside git.
+- The package does not use the Google SDK or Odin.
 
-### Экспорт CSV по ссылке
+### CSV export by link
 
-- Ключ не нужен: таблица должна быть открыта «всем, у кого есть ссылка — просмотр». Загружается одна вкладка по `ID` таблицы и `gid` вкладки (`CsvExportSource`).
-- **HTML вместо CSV** — ошибка `NotCsv` с подсказкой про доступ. Закрытая таблица обычно отвечает не `403`, а страницей входа Google с кодом `200`, поэтому HTML распознаётся и по `Content-Type: text/html`, и по `<` в начале ответа.
-- **Неизвестный `gid`** — ошибка `InvalidGid` (Google отвечает HTTP 400), в сообщении — `gid` и `ID` таблицы. Прочие коды HTTP — `HttpError` (для `401`/`403`/`404` — с подсказкой про доступ), нет сети или таймаут — `NetworkError`.
-- **Локаль таблицы.** Экспорт отдаёт значения в формате локали таблицы, поэтому в локалях с запятой `1.5` приходит как `1,5`. Если в столбце `int`/`float` (в том числе массиве) встречаются значения с `,`, источник выдаёт предупреждение `CommaInNumber` — одно на столбец, с адресом первой такой ячейки и числом значений; при разборе `float` такое значение — ошибка (см. «Разбор значений»). Рекомендуемая локаль — с точкой, например «США» (Файл → Настройки → Региональные настройки).
+- No key is needed: the spreadsheet must be shared as *Anyone with the link — Viewer*. One sheet is loaded by the spreadsheet `ID` and the sheet `gid` (`CsvExportSource`).
+- **HTML instead of CSV** is a `NotCsv` error with a hint about access. A private spreadsheet usually responds not with `403` but with the Google sign-in page and code `200`, so HTML is detected both by `Content-Type: text/html` and by `<` at the start of the response.
+- **Unknown `gid`** is an `InvalidGid` error (Google responds with HTTP 400); the message contains the `gid` and the spreadsheet `ID`. Other HTTP codes are `HttpError` (for `401`/`403`/`404` with a hint about access); no network or a timeout is `NetworkError`.
+- **Spreadsheet locale.** The export returns values formatted for the spreadsheet locale, so in locales with a comma `1.5` arrives as `1,5`. If an `int`/`float` column (including an array) contains values with `,`, the source emits a `CommaInNumber` warning — one per column, with the address of the first such cell and the number of values; when parsing a `float`, such a value is an error (see [Value parsing](#value-parsing)). The recommended locale is one with a dot, for example *United States* (*File → Settings → Locale*).
 
-## Правила таблицы
+## Sheet rules
 
-- **Вкладка = тип данных.** Имя вкладки — имя типа (и ScriptableObject-конфига).
-- **Пропуск:** вкладка, столбец или строка, у которых имя (для строки — значение `id`) начинается с `#`, не импортируются. Удобно для комментариев и черновиков.
-- **Строка 1 — заголовок**, данные начинаются со строки 2.
-- Столбцы сопоставляются с полями **по имени, не по позиции**: порядок столбцов можно менять.
-- **Первый столбец — `id`:** обязателен, уникален внутри вкладки, состоит из латиницы, цифр и `_`.
-- **Пустые строки** — где все импортируемые ячейки пусты — пропускаются. `id` сравниваются с учётом регистра: `Sword` и `sword` — разные строки.
+- **Sheet = data type.** The sheet name is the type name (and the name of the ScriptableObject config).
+- **Skipping:** a sheet, column or row whose name (for a row, the `id` value) starts with `#` is not imported. Handy for comments and drafts.
+- **Row 1 is the header**; data starts at row 2.
+- Columns are matched to fields **by name, not by position**: you can reorder columns.
+- **The first column is `id`:** required, unique within the sheet, made of Latin letters, digits and `_`.
+- **Empty rows** — where all imported cells are empty — are skipped. `id` values are compared case-sensitively: `Sword` and `sword` are different rows.
 
-## Откуда берутся типы — два режима
+## Where types come from: two modes
 
-1. **Схема из таблицы.** Заголовок столбца — `имя:тип`. По заголовкам генерируются классы строк и enum'ы.
-2. **Схема из кода.** Вы пишете свой класс строки, в заголовке таблицы — только имена столбцов.
+1. **Schema from the sheet.** The column header is `name:type`. Row classes and enums are generated from the headers.
+2. **Schema from code.** You write your own row class; the sheet header contains only column names.
 
-Если тип указан и в заголовке, и в коде, они должны совпадать — иначе это ошибка.
+If a type is given both in the header and in code, they must match — otherwise it is an error.
 
-### Схема из кода
+### Schema from code
 
-Класс строки пишете вы; столбец сопоставляется с полем **по точному имени, с учётом регистра** (`hp` ≠ `Hp`), тип столбца берётся из поля. Вызов ядра: `SheetParser.Parse("Units", rows, typeof(UnitRow))`; для набора вкладок — `SheetSetChecker.Check` с типом строки у каждой вкладки (`null` — схема из таблицы).
+You write the row class; a column is matched to a field **by exact name, case-sensitively** (`hp` ≠ `Hp`), and the column type is taken from the field. Core call: `SheetParser.Parse("Units", rows, typeof(UnitRow))`; for a set of sheets — `SheetSetChecker.Check` with a row type for each sheet (`null` means schema from the sheet).
 
-**Как включить в окне импорта.** Напишите класс строки и таблицу-наследника:
+**How to enable it in the import window.** Write a row class and a derived table:
 
 ```csharp
 public enum Rarity { Common, Epic }
@@ -64,145 +64,145 @@ public class UnitRow : ISheetRow
 public class MyUnitsTable : SheetTable<UnitRow> { }
 ```
 
-В окне `Window → Sheets to SO → Import` у каждой вкладки (Google API, Export, CSV-файлы) есть список **«Тип таблицы»**: «Генерировать код» (схема из таблицы) или любой неабстрактный наследник `SheetTable<>` проекта, по полному имени. Класс строки берётся из выбранной таблицы. Выбор хранится по имени вкладки (для CSV — имя файла без расширения), общий для всех источников, и переживает перезапуск Unity. Если переименовать вкладку (в том числе в поле «Имя вкладки» источника Export), выбор к ней не переходит — тип нужно выбрать заново. Если выбранного типа больше нет в проекте, в списке он показан как `<имя> (не найден)`, а проверка даёт ошибку `Sheet 'Units': table type '…' not found`.
+In the `Window → Sheets to SO → Import` window, each sheet (Google API, Export, *CSV files* («CSV-файлы»)) has a **Table type** («Тип таблицы») list: *Generate code* («Генерировать код», schema from the sheet) or any non-abstract `SheetTable<>` subclass in the project, by full name. The row class is taken from the selected table. The choice is stored by sheet name (for CSV, the file name without extension), shared by all sources, and survives a Unity restart. If you rename a sheet (including in the Export source's *Sheet name* («Имя вкладки») field), the choice does not follow it — select the type again. If the selected type no longer exists in the project, the list shows it as `<name> (not found)` / «<имя> (не найден)», and the check reports the error `Sheet 'Units': table type '…' not found`.
 
-Для такой вкладки:
+For such a sheet:
 
-- код не генерируется (ни класс строки, ни класс таблицы, ни enum'ы её полей), перекомпиляции нет; если в импорте нет вкладок с генерацией, папка кода не создаётся;
-- ассет — `<папка ассетов>/<Вкладка>.asset` выбранного типа;
-- класс строки должен быть `[Serializable]` и иметь публичный конструктор без параметров — иначе ошибка вкладки (Unity не сохранит строки);
-- имена `<Вкладка>` / `<Вкладка>Table` не участвуют в проверке конфликтов имён типов;
-- проверка «первый столбец — `id` типа `string`» действует как обычно.
+- no code is generated (neither the row class, nor the table class, nor the enums of its fields), and there is no recompilation; if the import has no sheets with code generation, the code folder is not created;
+- the asset is `<assets folder>/<Sheet>.asset` of the selected type;
+- the row class must be `[Serializable]` and have a public parameterless constructor — otherwise it is a sheet error (Unity would not save the rows);
+- the names `<Sheet>` / `<Sheet>Table` do not take part in the type name conflict check;
+- the "first column is `id` of type `string`" check applies as usual.
 
-**enum.** Тип столбца — C#-тип поля, допустимые значения — его члены. Неизвестное значение — ошибка на ячейке с перечнем: `Column 'rarity': 'Legendary' is not a value of enum 'Rarity'; allowed: Common, Epic`. Ошибки набора:
+**enum.** The column type is the C# type of the field; the allowed values are its members. An unknown value is a cell error listing the allowed values: `Column 'rarity': 'Legendary' is not a value of enum 'Rarity'; allowed: Common, Epic`. Set errors:
 
-- два разных C#-enum с одинаковым коротким именем во вкладках со схемой из кода;
-- вкладка с генерацией использует `enum<X>`, а `X` — C#-enum вкладки со схемой из кода (сгенерированный код получил бы второй тип `X`).
+- two different C# enums with the same short name in sheets with schema from code;
+- a sheet with code generation uses `enum<X>`, and `X` is a C# enum of a sheet with schema from code (the generated code would get a second type `X`).
 
-**Ссылки** — как обычно: `ref<X>` пишется в заголовке над полем `string` / `string[]` / `List<string>`; целевая вкладка может быть в любом режиме.
+**References** work as usual: `ref<X>` is written in the header over a `string` / `string[]` / `List<string>` field; the target sheet can be in either mode.
 
-**Смена режима вкладки.** Если вкладка раньше импортировалась с генерацией, её ассет имеет сгенерированный тип `<Вкладка>Table`, и импорт с другим типом даст ошибку `existing asset of type '…' is not '…'; not overwritten`: удалите ассет вручную. Старые сгенерированные файлы `<Вкладка>.cs` / `<Вкладка>Table.cs` тоже не удаляются — удалите их сами, если они больше не нужны. Первая проверка после смены режима (в любую сторону) разбирает снимок прошлого импорта уже по новому режиму, поэтому её diff может показать лишние изменения или сообщить, что предыдущий импорт не читается; на запись данных это не влияет, после применения diff снова точный.
+**Changing a sheet's mode.** If the sheet was previously imported with code generation, its asset has the generated type `<Sheet>Table`, and importing with another type gives the error `existing asset of type '…' is not '…'; not overwritten`: delete the asset manually. Old generated files `<Sheet>.cs` / `<Sheet>Table.cs` are not deleted either — delete them yourself if you no longer need them. The first check after changing the mode (in either direction) parses the previous import's snapshot using the new mode, so its diff may show extra changes or report that the previous import cannot be read; this does not affect writing the data, and after applying the diff is accurate again.
 
-**Какие поля учитываются** — те же, что сериализует Unity:
+**Which fields are taken into account** — the same ones Unity serializes:
 
-- экземплярные поля, не `static`, не `readonly` и не `const`, без `[NonSerialized]`;
-- `public` — всегда, остальные (`private`, `protected`, `internal`) — только с `[SerializeField]`;
-- поля базовых классов тоже (в том числе их `[SerializeField] private`); при совпадении имён побеждает поле наследника;
-- свойства не учитываются.
+- instance fields that are not `static`, `readonly` or `const`, without `[NonSerialized]`;
+- `public` ones always, others (`private`, `protected`, `internal`) only with `[SerializeField]`;
+- fields of base classes too (including their `[SerializeField] private` ones); when names coincide, the derived class field wins;
+- properties are not taken into account.
 
-**Соответствие типов:**
+**Type mapping:**
 
-| Тип поля C# | Тип столбца |
+| C# field type | Column type |
 |---|---|
 | `string` | `string` |
 | `int` | `int` |
 | `float` | `float` |
 | `bool` | `bool` |
-| любой `enum E` | `enum<E>` (короткое имя типа) |
-| `T[]`, `List<T>` от типов выше | `T[]`, например `int[]`, `enum<Rarity>[]` |
+| any `enum E` | `enum<E>` (short type name) |
+| `T[]`, `List<T>` of the types above | `T[]`, for example `int[]`, `enum<Rarity>[]` |
 
-Остальные типы (`double`, `long`, `Vector3`, вложенные классы, массивы массивов, `List<double>` и т. п.) не поддерживаются.
+Other types (`double`, `long`, `Vector3`, nested classes, arrays of arrays, `List<double>`, etc.) are not supported.
 
-**Тип в заголовке** писать не обязательно. Если он указан, он должен совпасть с типом поля: базовый тип, массив или нет, для `enum` — имя. Исключение — **`ref<X>`**: ссылка хранит `id` строки, поэтому `ref<X>` допустим для поля `string`, а `ref<X>[]` — для `string[]` и `List<string>`; столбец остаётся `ref<X>` и проверяется как ссылка. Обязательность (`!`) задаётся только в заголовке: `name:string!`.
+**The type in the header** is optional. If it is given, it must match the field type: base type, array or not, and for `enum` the name. The exception is **`ref<X>`**: a reference stores a row `id`, so `ref<X>` is allowed for a `string` field, and `ref<X>[]` for `string[]` and `List<string>`; the column stays `ref<X>` and is checked as a reference. Required (`!`) is set only in the header: `name:string!`.
 
-**Поля без столбца** — не ошибка: остаются со значением по умолчанию.
+**Fields without a column** are not an error: they keep their default value.
 
-**Свойства `ref`** (строка связанной таблицы, см. «Свойства `ref<X>`» в «Генерация кода») в этом режиме не генерируются: класс строки ваш, импортёр его не дополняет. Строку другой таблицы ищите сами через `TryGet`.
+**`ref` properties** (the row of the referenced table, see [`ref<X>` properties](#refx-properties) in [Code generation](#code-generation)) are not generated in this mode: the row class is yours and the importer does not extend it. Look up a row of another table yourself with `TryGet`.
 
-**Поле `id`** объявляйте как `string`: тип столбца `id` тоже берётся из поля, и при `int id` текстовые id вроде `warrior` дадут ошибку разбора `int` в дополнение к проверке `id`.
+**Declare the `id` field** as `string`: the `id` column type is also taken from the field, and with `int id` text ids like `warrior` produce an `int` parsing error in addition to the `id` check.
 
-**Ошибки** — на ячейке заголовка (`Units!B1`), столбец с ошибкой не импортируется, остальные разбираются:
+**Errors** are reported on the header cell (`Units!B1`); a column with an error is not imported, the rest are parsed:
 
-| Код | Когда | Пример сообщения |
+| Code | When | Example message |
 |---|---|---|
-| `TypeMismatch` | тип в заголовке не совпадает с полем | `Column 'hp' has type 'float' in header, but field 'UnitRow.hp' is 'int'` |
-| `UnknownField` | у столбца нет поля | `Column 'hp' has no matching field in 'UnitRow'; did you mean 'Hp'?` (подсказка — если есть поле, отличающееся только регистром) |
-| `UnsupportedFieldType` | тип поля не из таблицы выше | `Field 'UnitRow.damage' for column 'damage' has unsupported type 'Double'` |
+| `TypeMismatch` | the header type does not match the field | `Column 'hp' has type 'float' in header, but field 'UnitRow.hp' is 'int'` |
+| `UnknownField` | the column has no field | `Column 'hp' has no matching field in 'UnitRow'; did you mean 'Hp'?` (the hint appears if there is a field that differs only in case) |
+| `UnsupportedFieldType` | the field type is not in the table above | `Field 'UnitRow.damage' for column 'damage' has unsupported type 'Double'` |
 
-## Типы v1
+## Types v1
 
-| Тип | Пример заголовка | Пример ячейки | Значение |
+| Type | Header example | Cell example | Meaning |
 |---|---|---|---|
-| `string` (по умолчанию) | `id`, `title` | `sword_01` | строка; тип можно не писать |
-| `int` | `hp:int` | `120` | целое |
-| `float` | `speed:float` | `3.5` | дробное, **всегда с точкой**, независимо от локали |
-| `bool` | `stackable:bool` | `true` | логическое |
-| `enum<Имя>` | `rarity:enum<Rarity>` | `Epic` | значение перечисления `Rarity` |
-| `ref<Вкладка>` | `weapon:ref<Weapons>` | `sword_01` | ссылка на `id` строки во вкладке `Weapons` |
-| `тип[]` | `tags:string[]` | `melee\|starter` | массив в одной ячейке, элементы через `\|` |
+| `string` (default) | `id`, `title` | `sword_01` | string; the type can be omitted |
+| `int` | `hp:int` | `120` | integer |
+| `float` | `speed:float` | `3.5` | fractional number, **always with a dot**, regardless of locale |
+| `bool` | `stackable:bool` | `true` | boolean |
+| `enum<Name>` | `rarity:enum<Rarity>` | `Epic` | a value of the `Rarity` enum |
+| `ref<Sheet>` | `weapon:ref<Weapons>` | `sword_01` | a reference to a row `id` in the `Weapons` sheet |
+| `type[]` | `tags:string[]` | `melee\|starter` | an array in one cell, elements separated by `\|` |
 
-- **Массивы:** элементы разделяются символом `|`. Чтобы использовать `|` внутри элемента, экранируйте его: `\|`.
-- **Обязательный столбец:** `!` в конце типа, например `name:string!`. Пустая ячейка в таком столбце — ошибка.
-- **Пустые ячейки** в остальных столбцах дают значение по умолчанию для типа.
-- **Даты** храните строкой в ISO 8601 (`2026-11-23`, `2026-11-23T16:05:00Z`).
+- **Arrays:** elements are separated by the `|` character. To use `|` inside an element, escape it: `\|`.
+- **Required column:** `!` at the end of the type, for example `name:string!`. An empty cell in such a column is an error.
+- **Empty cells** in other columns give the default value for the type.
+- **Dates:** store them as strings in ISO 8601 (`2026-11-23`, `2026-11-23T16:05:00Z`).
 
-### Разбор значений
+### Value parsing
 
-- **Пустая ячейка** — пустая или из одних пробелов. В столбце с `!` — ошибка, в остальных — значение по умолчанию:
+- **An empty cell** is empty or whitespace only. In a column with `!` it is an error, in others it gives the default value:
 
-  | Тип | Значение | По умолчанию |
+  | Type | Value | Default |
   |---|---|---|
-  | `string` | текст как есть, пробелы не обрезаются | `""` |
+  | `string` | text as is, whitespace is not trimmed | `""` |
   | `int` | `int` | `0` |
   | `float` | `float` | `0` |
   | `bool` | `bool` | `false` |
-  | `enum<Имя>` | имя значения (строка) | нет значения (`null`) |
-  | `ref<Вкладка>` | `id` строки (строка) | нет значения (`null`) |
-  | `тип[]` | массив элементов типа | пустой массив |
+  | `enum<Name>` | value name (string) | no value (`null`) |
+  | `ref<Sheet>` | row `id` (string) | no value (`null`) |
+  | `type[]` | array of elements of the type | empty array |
 
-- **`int`:** целое со знаком или без, пробелы по краям игнорируются. `1.0`, `1 000`, `abc`, выход за пределы `int` — ошибка.
-- **`float`:** точка как разделитель, допускаются знак и экспонента (`1.5e-2`), независимо от локали. `NaN`, `Infinity` и выход за пределы `float` — ошибка. `1,5` — ошибка с подсказкой `use '.' as decimal separator: '1.5'`.
-- **`bool`:** `true` / `false` без учёта регистра (чекбоксы Google Sheets — `TRUE` / `FALSE`), остальное — ошибка.
-- **`enum`, `ref`:** текст без пробелов по краям; допустимость значения и существование строки проверяются отдельно (см. «Проверка ссылок и enum»).
-- **Массивы:** элементы разделяются `|`; `\|` — символ `|` внутри элемента, любой другой `\` — обычный символ. Элементы `string[]` не обрезаются и могут быть пустыми (`a||b` → `a`, пустая строка, `b`). У остальных типов элемент разбирается как одиночное значение (пробелы по краям игнорируются), пустой элемент — ошибка. Ошибки всех элементов собираются, в сообщении — номер и текст элемента.
-- **Одиночный `string`:** экранирование не действует, `a\|b` остаётся `a\|b`.
-- Ошибки не прерывают разбор: собираются все ошибки строки, у каждой — адрес ячейки (`B7`).
+- **`int`:** an integer with or without a sign; surrounding whitespace is ignored. `1.0`, `1 000`, `abc` and values out of `int` range are errors.
+- **`float`:** a dot as the decimal separator; a sign and an exponent (`1.5e-2`) are allowed, regardless of locale. `NaN`, `Infinity` and values out of `float` range are errors. `1,5` is an error with the hint `use '.' as decimal separator: '1.5'`.
+- **`bool`:** `true` / `false`, case-insensitive (Google Sheets checkboxes give `TRUE` / `FALSE`); anything else is an error.
+- **`enum`, `ref`:** text without surrounding whitespace; whether the value is allowed and whether the row exists are checked separately (see [Reference and enum checks](#reference-and-enum-checks)).
+- **Arrays:** elements are separated by `|`; `\|` is the `|` character inside an element, any other `\` is an ordinary character. `string[]` elements are not trimmed and can be empty (`a||b` → `a`, empty string, `b`). For other types each element is parsed as a single value (surrounding whitespace is ignored), and an empty element is an error. Errors of all elements are collected; the message contains the element's index and text.
+- **Single `string`:** escaping does not apply, `a\|b` stays `a\|b`.
+- Errors do not stop parsing: all errors of a row are collected, each with a cell address (`B7`).
 
-### Проверка ссылок и enum
+### Reference and enum checks
 
-После разбора набор вкладок проверяется целиком; ошибки всех вкладок собираются одним списком с адресами `Вкладка!B7`. Пустые ячейки не проверяются; у массивов проверяется каждый элемент, в сообщении — номер и текст элемента.
+After parsing, the set of sheets is checked as a whole; errors of all sheets are collected into one list with addresses `Sheet!B7`. Empty cells are not checked; for arrays each element is checked, and the message contains the element's index and text.
 
-- **`ref<X>`** проверяется в пределах загруженного набора вкладок. Если вкладки `X` среди загруженных нет — одна ошибка на заголовке столбца (например, `Units!E1`), ячейки столбца не проверяются. Иначе значение должно совпасть с `id` одной из строк `X` (с учётом регистра: `Sword` ≠ `sword`). Ссылка на свою же вкладку допустима.
-- **Источник значений `enum<E>`:**
-  - если вызывающий код передал список значений `E` (например, из готового C# enum), значение должно точно, с учётом регистра, совпасть с элементом списка, иначе ошибка с перечнем допустимых значений;
-  - если списка нет, допустимо любое значение — имя C# (латиница, цифры и `_`, не с цифры, не ключевое слово). Встреченные значения собираются без повторов в порядке появления (вкладки по порядку, строки сверху вниз, столбцы слева направо) и идут в генерацию enum'а.
+- **`ref<X>`** is checked within the loaded set of sheets. If sheet `X` is not among the loaded ones, there is one error on the column header (for example, `Units!E1`), and the column's cells are not checked. Otherwise the value must match the `id` of one of the rows of `X` (case-sensitively: `Sword` ≠ `sword`). A reference to the same sheet is allowed.
+- **Source of `enum<E>` values:**
+  - if the calling code passed a list of values of `E` (for example, from an existing C# enum), the value must match a list element exactly, case-sensitively; otherwise it is an error listing the allowed values;
+  - if there is no list, any value that is a valid C# name is allowed (Latin letters, digits and `_`, not starting with a digit, not a keyword). The values found are collected without duplicates in order of appearance (sheets in order, rows top to bottom, columns left to right) and go into enum generation.
 
-**При ошибках разбора** проверка ссылок и enum всё равно выполняется, чтобы все ошибки были видны за один проход. Правила:
+**When parsing fails**, reference and enum checks are still performed so that all errors are visible in one pass. Rules:
 
-- Ячейка, которая сама не разобралась (`abc` в `int`, пустая обязательная, пустой элемент массива), повторно не проверяется. Строка с такой ошибкой остаётся целью ссылок, её остальные `ref`/`enum`-ячейки проверяются.
-- Строка с пустым `id` — не цель ссылок (ссылаться не на что); её остальные ячейки проверяются.
-- Некорректный (`sword 1`) или повторный `id` считается существующим: ссылка на него не даёт ошибки «нет строки с таким id», ошибка уже показана на самом `id`. После исправления `id` ссылка на старое значение может сломаться — это покажет следующая проверка. Остальные ячейки такой строки проверяются.
-- Столбец с ошибкой в заголовке (кроме `id`) выпадает из разбора: его ячейки не проверяются. Остальные столбцы и `id` вкладки надёжны.
-- Если у вкладки нет разобранного столбца `id` (ошибка в заголовке первого столбца, первый столбец не `id`, нет столбцов), она не цель ссылок: ячейки `ref<X>` на неё не проверяются, ошибки «вкладка не загружена» нет. Собственные `ref`/`enum`-ячейки такой вкладки проверяются.
-- Столбец `id` не типа `string` (`id:int`) — ошибка, но вкладка остаётся целью ссылок по тексту `id`.
-- При ошибках в именах вкладок (нет имени, повтор с учётом или без учёта регистра) или пустом наборе проверка ссылок и enum не выполняется: неясно, на какую вкладку ведёт ссылка.
+- A cell that failed to parse itself (`abc` in `int`, an empty required cell, an empty array element) is not checked again. A row with such an error remains a reference target, and its other `ref`/`enum` cells are checked.
+- A row with an empty `id` is not a reference target (there is nothing to refer to); its other cells are checked.
+- An invalid (`sword 1`) or duplicate `id` is treated as existing: a reference to it does not produce a "no row with this id" error, since the error is already shown on the `id` itself. After the `id` is fixed, a reference to the old value may break — the next check will show it. The other cells of such a row are checked.
+- A column with an error in its header (except `id`) drops out of parsing: its cells are not checked. The other columns and the sheet's `id` are reliable.
+- If a sheet has no parsed `id` column (an error in the first column header, the first column is not `id`, no columns), it is not a reference target: `ref<X>` cells pointing to it are not checked, and there is no "sheet not loaded" error. The sheet's own `ref`/`enum` cells are checked.
+- An `id` column that is not of type `string` (`id:int`) is an error, but the sheet remains a reference target by the `id` text.
+- With errors in sheet names (no name, a duplicate case-sensitively or case-insensitively) or an empty set, reference and enum checks are not performed: it is unclear which sheet a reference points to.
 
-Пример заголовка вкладки `Units`:
+Example header of the `Units` sheet:
 
 ```
 id | name:string! | hp:int | rarity:enum<Rarity> | weapon:ref<Weapons> | tags:string[] | #notes
 ```
 
-## Результат
+## Output
 
-- Один ScriptableObject на вкладку: список строк и поиск по `id`.
-- Шаблоны кодогенерации можно подменить; namespace и asmdef для сгенерированного кода настраиваются.
+- One ScriptableObject per sheet: a list of rows and lookup by `id`.
+- Code generation templates can be replaced; the namespace and asmdef for the generated code are configurable.
 
-### Генерация кода
+### Code generation
 
-По заголовку вкладки генерируется класс строки (`[global::System.Serializable] public sealed partial class`) — по одному `public`-полю на столбец, в порядке столбцов, имя поля = имя столбца. Столбцы с `#` в класс не попадают. Каждый enum из `enum<Имя>` генерируется отдельно со списком значений; значения — идентификаторы C#, без повторов, у каждого явное число (`Common = 0,`), см. «Значения enum» ниже. Сгенерированный файл начинается с блока `// <auto-generated>`: править его вручную не нужно, изменения пропадут при следующей генерации. Переводы строк — всегда `\n`.
+From the sheet header, a row class is generated (`[global::System.Serializable] public sealed partial class`) — one `public` field per column, in column order, field name = column name. Columns with `#` are not included in the class. Each enum from `enum<Name>` is generated separately with its list of values; the values are C# identifiers, without duplicates, each with an explicit number (`Common = 0,`), see "Enum values" below. A generated file starts with a `// <auto-generated>` block: do not edit it manually, changes will be lost on the next generation. Line endings are always `\n`.
 
-| Тип столбца | Тип поля C# |
+| Column type | C# field type |
 |---|---|
 | `string` | `string` |
 | `int` | `int` |
 | `float` | `float` |
 | `bool` | `bool` |
 | `enum<X>` | `X` |
-| `ref<X>` | `string` — `id` строки во вкладке `X` (над полем комментарий `// ref<X>: row id in sheet X`) |
-| `тип[]` | массив того же типа, например `int[]`, `X[]`, `string[]` для `ref<X>[]` |
+| `ref<X>` | `string` — the row `id` in sheet `X` (with the comment `// ref<X>: row id in sheet X` above the field) |
+| `type[]` | an array of the same type, for example `int[]`, `X[]`, `string[]` for `ref<X>[]` |
 
-На каждую вкладку, кроме класса строки, генерируется класс таблицы — конкретный ScriptableObject, из которого создаётся ассет. В том же файле — вторая часть `partial`-класса строки: реализация `ISheetRow` (`Id` возвращает поле `id`, поэтому столбец `id` должен быть типа `string`), `ISheetTableRow` (строка знает свою таблицу; поле `__table` не сериализуется) и свойства для столбцов `ref<X>`:
+For each sheet, besides the row class, a table class is generated — a concrete ScriptableObject from which the asset is created. The same file contains the second part of the `partial` row class: the `ISheetRow` implementation (`Id` returns the `id` field, so the `id` column must be of type `string`), `ISheetTableRow` (the row knows its table; the `__table` field is not serialized) and properties for `ref<X>` columns:
 
 ```csharp
 public sealed partial class Units : global::Kentavr.SheetsToSO.Core.ISheetRow, global::Kentavr.SheetsToSO.ISheetTableRow
@@ -222,112 +222,112 @@ public sealed class UnitsTable : global::Kentavr.SheetsToSO.SheetTable<Units>
 }
 ```
 
-#### Свойства `ref<X>`
+#### `ref<X>` properties
 
-Поле столбца `ref<X>` остаётся строкой с `id` (`public string weapon;`), хранение в ассете не меняется. Дополнительно на каждый столбец `ref<X>` генерируется свойство, которое отдаёт строку таблицы `X`:
+The field of a `ref<X>` column stays a string with an `id` (`public string weapon;`); storage in the asset does not change. In addition, for each `ref<X>` column a property is generated that returns the row of table `X`:
 
 ```csharp
-Weapons w = unitsTable.Get("knight").Weapon; // строка из таблицы Weapons или null
+Weapons w = unitsTable.Get("knight").Weapon; // row of the Weapons table or null
 ```
 
-- **Имя** — имя столбца с первой буквой в верхнем регистре: `weapon` → `Weapon`, `dropItems` → `DropItems`.
-- **Тип:** `ref<X>` → `X`, `ref<X>[]` → `IReadOnlyList<X>`. Типы в коде полностью квалифицированы, поэтому свойство может называться как тип (`weapons:ref<Weapons>[]` → свойство `Weapons`).
-- **`ref<X>`:** `null`, если `id` пустой, строки с таким `id` в таблице нет (например, ассет правили руками) или таблица не связана. Без исключений и без сообщений в Console — свойство можно читать в цикле.
-- **`ref<X>[]`:** список той же длины, что массив `id`, индексы совпадают; на месте пустого или ненайденного `id` — `null`. Пустой массив `id` — пустой список. Таблица не связана — `null`. Каждый вызов создаёт новый список: в цикле сохраните его в переменную.
-- **Таблица не связана**, когда ассет импортирован старой версией и ещё не импортировался повторно, когда ассета `X` нет в той же папке ассетов или он другого типа (см. «Ассеты и код»), а также для строки, созданной в коде и не лежащей в таблице.
-- **Конфликт имён** — ошибка проверки на заголовке столбца, импорт не применяется: имя свойства не должно совпадать с именем столбца вкладки (в том числе своего: `Weapon:ref<Weapons>`, `_weapon:ref<Weapons>`), с именем класса строки (`units:ref<X>` во вкладке `Units`) и с полем `__table`. Автоматических суффиксов нет: имя свойства всегда предсказуемо, конфликт решается переименованием столбца.
-- В режиме «схема из кода» свойства не генерируются.
+- **Name:** the column name with the first letter in upper case: `weapon` → `Weapon`, `dropItems` → `DropItems`.
+- **Type:** `ref<X>` → `X`, `ref<X>[]` → `IReadOnlyList<X>`. Types in the code are fully qualified, so a property can have the same name as a type (`weapons:ref<Weapons>[]` → property `Weapons`).
+- **`ref<X>`:** `null` if the `id` is empty, there is no row with this `id` in the table (for example, the asset was edited by hand) or the table is not linked. No exceptions and no messages in the Console — the property can be read in a loop.
+- **`ref<X>[]`:** a list of the same length as the `id` array, with matching indices; `null` in place of an empty or missing `id`. An empty `id` array gives an empty list. An unlinked table gives `null`. Each call creates a new list: in a loop, store it in a variable.
+- **The table is not linked** when the asset was imported by an older version and has not been reimported yet, when there is no asset `X` in the same assets folder or it is of another type (see [Assets and code](#assets-and-code)), and for a row created in code that is not in a table.
+- **A name conflict** is a check error on the column header, and the import is not applied: the property name must not match the name of a column of the sheet (including its own: `Weapon:ref<Weapons>`, `_weapon:ref<Weapons>`), the name of the row class (`units:ref<X>` in the `Units` sheet) or the `__table` field. There are no automatic suffixes: the property name is always predictable, and a conflict is resolved by renaming the column.
+- In schema from code mode, the properties are not generated.
 
-Имена и файлы (имя файла = имя класса — Unity требует этого для ScriptableObject):
+Names and files (file name = class name — Unity requires this for ScriptableObject):
 
-| Что | Имя | Файл |
+| What | Name | File |
 |---|---|---|
-| класс строки | имя вкладки: `Units` | `Units.cs` |
-| класс таблицы | `<Вкладка>Table`: `UnitsTable` | `UnitsTable.cs` |
-| enum | имя из `enum<Rarity>` | `Rarity.cs` |
+| row class | sheet name: `Units` | `Units.cs` |
+| table class | `<Sheet>Table`: `UnitsTable` | `UnitsTable.cs` |
+| enum | name from `enum<Rarity>` | `Rarity.cs` |
 
-Имена классов строк, таблиц и enum'ов не должны совпадать между собой (например, вкладки `Units` и `UnitsTable` одновременно — ошибка).
+Names of row classes, table classes and enums must not coincide with each other (for example, sheets `Units` and `UnitsTable` at the same time is an error).
 
-**Значения enum** берутся из данных: различные значения всех импортируемых столбцов `enum<X>` и `enum<X>[]` в порядке первого появления (вкладки по порядку, строки сверху вниз, столбцы слева направо). Значение, которое не годится как имя C#, — ошибка с адресом ячейки (`Units!C5`). Пустая ячейка enum членов не добавляет, а в ассете даёт значение поля по умолчанию — число 0 (обычно первый член enum'а).
+**Enum values** are taken from the data: the distinct values of all imported `enum<X>` and `enum<X>[]` columns in order of first appearance (sheets in order, rows top to bottom, columns left to right). A value that is not a valid C# name is an error with a cell address (`Units!C5`). An empty enum cell adds no members, and in the asset gives the field's default value — the number 0 (usually the first member of the enum).
 
-**Числа значений enum закреплены.** Unity хранит поле enum числом, поэтому числа не должны меняться между импортами:
+**Enum value numbers are fixed.** Unity stores an enum field as a number, so the numbers must not change between imports:
 
-- Прежние значения берутся из уже сгенерированного файла `<папка кода>/<Enum>.cs` (он лежит в `Assets/` и коммитится, так что числа одинаковы у всей команды). Порядок и числа этих значений сохраняются, от порядка строк в таблице они больше не зависят.
-- Новые значения дописываются в конец в порядке первого появления, с числами `max + 1`, `max + 2`… (при первой генерации — `0, 1, 2…`).
-- Значение, которого больше нет в таблицах, остаётся в enum с прежним числом; в отчёте импорта и в Console — предупреждение.
-- Файл, сгенерированный старой версией (без чисел: `Common,` `Epic,` `Rare,`), читается по правилам C# — 0, 1, 2… в порядке файла; первый импорт перепишет его с явными числами, смысл чисел не изменится.
-- Если существующий файл не удаётся разобрать (правлен вручную, нестандартный шаблон), импорт останавливается с ошибкой, ничего не пишется. Разбираются комментарии `//` и `/* */`, элементы `Имя` и `Имя = целое`; повтор имени или числа — ошибка.
-- Чтобы перенумеровать значения или убрать пропавшее, удалите файл enum'а (или строку в нём) вручную — генератор берёт то, что лежит в файле.
+- Existing values are taken from the already generated file `<code folder>/<Enum>.cs` (it lives in `Assets/` and is committed, so the numbers are the same for the whole team). The order and numbers of these values are preserved and no longer depend on the row order in the sheet.
+- New values are appended at the end in order of first appearance, with numbers `max + 1`, `max + 2`… (on the first generation — `0, 1, 2…`).
+- A value that no longer exists in the sheets stays in the enum with its previous number; the import report and the Console show a warning.
+- A file generated by an older version (without numbers: `Common,` `Epic,` `Rare,`) is read by C# rules — 0, 1, 2… in file order; the first import rewrites it with explicit numbers, and the meaning of the numbers does not change.
+- If an existing file cannot be parsed (edited by hand, a non-standard template), the import stops with an error and nothing is written. `//` and `/* */` comments and `Name` and `Name = integer` members are parsed; a duplicate name or number is an error.
+- To renumber values or remove a missing one, delete the enum file (or a line in it) manually — the generator takes what is in the file.
 
-Подстановки шаблонов (простая замена текста; неизвестные `{{…}}` остаются как есть):
+Template placeholders (plain text replacement; unknown `{{…}}` stay as is):
 
-| Подстановка | Шаблон | Значение |
+| Placeholder | Template | Value |
 |---|---|---|
-| `{{Header}}` | все | блок `// <auto-generated>` |
-| `{{Namespace}}` | все | namespace из настроек |
-| `{{ClassName}}` | класс строки | имя класса |
-| `{{Fields}}` | класс строки | поля, каждая строка с отступом 8 пробелов |
-| `{{EnumName}}` | enum | имя enum'а |
-| `{{Members}}` | enum | значения с явными числами через `,` (`Common = 0,`), каждое на своей строке с отступом 8 пробелов; свой шаблон должен оставлять `enum {{EnumName}} { {{Members}} }`, чтобы числа читались при следующем импорте |
-| `{{TableClassName}}` | класс таблицы | имя класса таблицы |
-| `{{RowClassName}}` | класс таблицы | имя класса строки |
-| `{{RefProperties}}` | класс таблицы | свойства `ref<X>`; пусто, если столбцов `ref` нет. Каждое свойство начинается с пустой строки и комментария, отступ 8 пробелов, поэтому подстановку ставят сразу после последнего члена класса строки, на той же строке. Свойства обращаются к полю `__table`: вместе с подстановкой оставьте в своём шаблоне поле `__table` и `ISheetTableRow.SetTable` из шаблона по умолчанию. Без подстановки свойства не генерируются (это не ошибка) |
+| `{{Header}}` | all | the `// <auto-generated>` block |
+| `{{Namespace}}` | all | namespace from the settings |
+| `{{ClassName}}` | row class | class name |
+| `{{Fields}}` | row class | fields, each line indented by 8 spaces |
+| `{{EnumName}}` | enum | enum name |
+| `{{Members}}` | enum | values with explicit numbers separated by `,` (`Common = 0,`), each on its own line indented by 8 spaces; a custom template must keep `enum {{EnumName}} { {{Members}} }` so that the numbers can be read on the next import |
+| `{{TableClassName}}` | table class | table class name |
+| `{{RowClassName}}` | table class | row class name |
+| `{{RefProperties}}` | table class | `ref<X>` properties; empty if there are no `ref` columns. Each property starts with an empty line and a comment, indented by 8 spaces, so the placeholder is placed right after the last member of the row class, on the same line. The properties access the `__table` field: together with the placeholder, keep the `__table` field and `ISheetTableRow.SetTable` from the default template in your template. Without the placeholder the properties are not generated (this is not an error) |
 
-## Импорт
+## Import
 
-Конвейер: **загрузить → разобрать → проверить → показать diff → применить**.
+Pipeline: **load → parse → check → show diff → apply**.
 
-1. Загрузка выбранных вкладок из источника.
-2. Разбор заголовков и значений по правилам выше.
-3. Проверка. У каждой ошибки есть адрес ячейки в виде `Вкладка!B7`.
-4. Diff с последним применённым импортом: добавлено / удалено / изменено.
-5. Применение — только после подтверждения.
+1. Load the selected sheets from the source.
+2. Parse headers and values by the rules above.
+3. Check. Each error has a cell address in the form `Sheet!B7`.
+4. Diff with the last applied import: added / removed / changed.
+5. Apply — only after confirmation.
 
-Проверка ссылок и enum и проверка конфликтов имён типов выполняются вместе с разбором, даже если в разборе есть ошибки: все ошибки видны за один проход (правила — в «Проверка ссылок и enum», «При ошибках разбора»). Исключение — ошибки имён вкладок: тогда показываются только они и ошибки разбора.
+Reference and enum checks and the type name conflict check run together with parsing, even if parsing has errors: all errors are visible in one pass (rules — in [Reference and enum checks](#reference-and-enum-checks), *When parsing fails*). The exception is sheet name errors: then only they and parsing errors are shown.
 
-Ошибки блокируют импорт — и ошибки разбора, и межвкладочные (битые `ref<>`, вкладка из `ref<X>` не загружена, недопустимые значения enum, конфликт имён типов). При запуске из CLI ошибки дают ненулевой код выхода: 0 — ошибок нет, 1 — ошибки данных, 2 — ошибки аргументов или доступа (см. [Консольная проверка (CI)](../README.md#консольная-проверка-ci)).
+Errors block the import — both parsing errors and cross-sheet ones (broken `ref<>`, the sheet from `ref<X>` not loaded, invalid enum values, a type name conflict). When run from the CLI, errors give a non-zero exit code: 0 — no errors, 1 — data errors, 2 — argument or access errors (see [Command-line check (CI)](../README.md#command-line-check-ci)).
 
-**С чем сравнивается diff.** После успешного применения сырые ячейки импортированных вкладок сохраняются в `Library/Kentavr.SheetsToSO/snapshots/<папка ассетов, '/' → '_'>.json` — это «старый» снимок для следующей проверки той же папки ассетов. Импорт заменяет в снимке только свои вкладки (имена без учёта регистра), остальные остаются от прошлых импортов. В diff участвуют только вкладки текущего набора: вкладка, которую в этот раз не отметили, удалённой не считается; вкладки, которой нет в снимке, — добавлена. Снимок свой на каждой машине (`Library/` не в git): на другой машине или после удаления `Library/` первый diff покажет все вкладки как добавленные. Если сравниваемая вкладка снимка не разбирается без ошибок (например, по новым правилам), diff не строится — показывается пояснение; применение это не блокирует. Межвкладочные проверки к снимку не применяются: его вкладки могут быть из разных импортов.
+**What the diff is compared with.** After a successful apply, the raw cells of the imported sheets are saved to `Library/Kentavr.SheetsToSO/snapshots/<assets folder, '/' → '_'>.json` — this is the "old" snapshot for the next check of the same assets folder. An import replaces only its own sheets in the snapshot (names compared case-insensitively); the rest remain from previous imports. Only the sheets of the current set take part in the diff: a sheet that was not selected this time is not considered removed; a sheet that is not in the snapshot is added. The snapshot is per machine (`Library/` is not in git): on another machine or after deleting `Library/`, the first diff shows all sheets as added. If a compared sheet of the snapshot cannot be parsed without errors (for example, under new rules), the diff is not built and an explanation is shown; this does not block applying. Cross-sheet checks are not applied to the snapshot: its sheets may come from different imports.
 
-### Ассеты и код
+### Assets and code
 
-- **Где лежат.** Ассет вкладки — `<папка ассетов>/<Вкладка>.asset` (`Assets/Data/Units.asset`). Код — в папке кода, по умолчанию `<папка ассетов>/Generated/`. Обе папки — внутри `Assets/`.
-- **Ошибки.** Если хоть одна вкладка с ошибками (в том числе межвкладочными), ни код, ни ассеты не меняются; ошибки с адресами — в окне импорта и в консоли.
-- **Код.** Файл перезаписывается, только если его текст изменился, — без лишних перекомпиляций. Если код изменился, ассеты обновляются автоматически после перекомпиляции скриптов (отдельный итог в консоли). Если код не изменился, ассеты обновляются сразу. Устаревшие файлы кода не удаляются.
-- **Повторный импорт** обновляет существующий ассет на месте: строки заменяются, GUID и ссылки на ассет из сцен и префабов сохраняются. Ассет с тем же путём, но другого типа не перезаписывается — это ошибка.
-- **Ассеты без вкладки.** Ассеты таблиц прямо в папке ассетов (без подпапок), для которых в импорте нет вкладки, не удаляются: по каждому — предупреждение в консоли с путём, клик выделяет ассет.
-- **Связанные таблицы.** Ассет таблицы хранит ссылки на ассеты таблиц, на которые указывают его столбцы `ref<X>` (поле `linkedTables`, видно в инспекторе в режиме Debug). Импортёр проставляет их сам при каждом импорте, после создания и обновления всех ассетов: ищет `<папка ассетов>/<X>.asset` типа `<Namespace>.XTable`; ссылка на свою вкладку тоже ставится. Список заменяется целиком, у вкладки без `ref` он пустой. Если ассет `X` не найден или другого типа, ссылка не ставится, а в отчёте и в Console — предупреждение (клик выделяет ассет), например: `Assets/Data/Units.asset: column 'weapon' refers to sheet 'Weapons', but 'Assets/Data/Weapons.asset' is not a 'SheetsData.WeaponsTable' asset; Units.Weapon will return null`. Предупреждение импорт не останавливает. Связь строк с таблицей восстанавливается при загрузке ассета, без глобального состояния, `Resources` и поиска ассетов в рантайме. Связи между таблицами из разных папок ассетов не ставятся.
-- **Старые ассеты** (импортированные до появления свойств `ref`) читаются как раньше: строки и `TryGet` работают, свойства `ref` отдают `null` до повторного импорта.
-- Если папка кода лежит под своим asmdef, он должен ссылаться на `Kentavr.SheetsToSO` и `Kentavr.SheetsToSO.Core`.
+- **Location.** A sheet's asset is `<assets folder>/<Sheet>.asset` (`Assets/Data/Units.asset`). Code goes to the code folder, by default `<assets folder>/Generated/`. Both folders are inside `Assets/`.
+- **Errors.** If at least one sheet has errors (including cross-sheet ones), neither code nor assets are changed; errors with addresses are shown in the import window and in the console.
+- **Code.** A file is rewritten only if its text has changed — without unnecessary recompilation. If the code has changed, the assets are updated automatically after scripts are recompiled (with a separate summary in the console). If the code has not changed, the assets are updated immediately. Stale code files are not deleted.
+- **Reimport** updates the existing asset in place: rows are replaced, and the GUID and references to the asset from scenes and prefabs are preserved. An asset with the same path but of another type is not overwritten — this is an error.
+- **Assets without a sheet.** Table assets directly in the assets folder (not in subfolders) that have no sheet in the import are not deleted: for each one there is a warning in the console with its path, and clicking it selects the asset.
+- **Linked tables.** A table asset stores references to the table assets its `ref<X>` columns point to (the `linkedTables` field, visible in the Inspector in Debug mode). The importer sets them itself on every import, after all assets are created and updated: it looks for `<assets folder>/<X>.asset` of type `<Namespace>.XTable`; a reference to its own sheet is set too. The list is replaced as a whole; for a sheet without `ref` it is empty. If asset `X` is not found or is of another type, the reference is not set, and the report and the Console show a warning (clicking it selects the asset), for example: `Assets/Data/Units.asset: column 'weapon' refers to sheet 'Weapons', but 'Assets/Data/Weapons.asset' is not a 'SheetsData.WeaponsTable' asset; Units.Weapon will return null`. The warning does not stop the import. The link between rows and their table is restored when the asset is loaded, without global state, `Resources` or asset search at runtime. Links between tables from different assets folders are not set.
+- **Old assets** (imported before `ref` properties appeared) are read as before: rows and `TryGet` work, and `ref` properties return `null` until reimported.
+- If the code folder is under its own asmdef, it must reference `Kentavr.SheetsToSO` and `Kentavr.SheetsToSO.Core`.
 
-### Что считается ошибкой
+### What counts as an error
 
-- пустой `id`;
-- повторный `id` внутри вкладки;
-- `id` не из латиницы, цифр и `_`;
-- значение не соответствует типу столбца (например, `abc` в `hp:int` или `3,5` в `float`);
-- значение, которого нет в переданном списке enum;
-- значение enum без переданного списка, которое не годится как имя C# (`1st`, `class`);
-- битая ссылка `ref<>`: во вкладке-цели нет строки с таким `id`;
-- вкладки из `ref<X>` нет среди загруженных (одна ошибка на заголовке столбца);
-- недопустимое имя столбца;
-- пустая ячейка в обязательном (`!`) столбце;
-- имя свойства столбца `ref<X>` совпадает с именем столбца, класса строки или поля `__table` (ошибка на заголовке столбца: `Units!E1: Column 'Weapon': property 'Weapon' generated for ref<Weapons> has the same name as column 'Weapon'; rename one of the columns`);
-- расхождение типа в заголовке и в классе строки (режим «схема из кода»).
+- an empty `id`;
+- a duplicate `id` within a sheet;
+- an `id` not made of Latin letters, digits and `_`;
+- a value that does not match the column type (for example, `abc` in `hp:int` or `3,5` in `float`);
+- a value that is not in the passed enum list;
+- an enum value without a passed list that is not a valid C# name (`1st`, `class`);
+- a broken `ref<>` reference: the target sheet has no row with this `id`;
+- the sheet from `ref<X>` is not among the loaded ones (one error on the column header);
+- an invalid column name;
+- an empty cell in a required (`!`) column;
+- the property name of a `ref<X>` column matches the name of a column, the row class or the `__table` field (an error on the column header: `Units!E1: Column 'Weapon': property 'Weapon' generated for ref<Weapons> has the same name as column 'Weapon'; rename one of the columns`);
+- a mismatch between the type in the header and in the row class (schema from code mode).
 
 ### Diff
 
-Сравниваются два снимка проверенных вкладок (результаты разбора без ошибок): старый и новый. Вкладка с ошибками или повтор имени вкладки в одном снимке — ошибка вызова, diff по таким данным не строится. Пустой старый снимок (первый импорт) — все вкладки добавлены.
+Two snapshots of checked sheets (parse results without errors) are compared: the old one and the new one. A sheet with errors or a duplicate sheet name in one snapshot is a call error, and no diff is built from such data. An empty old snapshot (first import) means all sheets are added.
 
-- **Вкладки** сопоставляются по имени, **строки** — по `id`. Регистр важен: `Sword` и `sword` — разные `id`, `Units` и `units` — разные вкладки.
-- Смена `id` — это удаление строки со старым `id` и добавление строки с новым; переименования не ищутся. Номер строки в сравнении не участвует: перестановка строк — не изменение.
-- У строки, которая есть в обоих снимках, сравниваются поля по объединению столбцов: сначала столбцы новой вкладки в их порядке, затем удалённые столбцы в порядке старой. Перестановка столбцов — не изменение. Добавленный или удалённый столбец видно как изменение поля у каждой строки: на стороне, где столбца нет, — `(missing)`.
-- Значения равны, если совпадают тип и значение: массивы — поэлементно и с учётом порядка, `float` — точно, без допуска (`1.5` и `1.50` равны, это одно число). Пустые `enum`/`ref` (`null`) равны друг другу. При смене типа столбца (`int` → `float`) значения разного типа считаются изменением, даже если выглядят одинаково: `120 → 120`.
-- Вкладка без изменений в результат не попадает. Порядок: вкладки — как в новом снимке, затем удалённые в порядке старого; добавленные и изменённые строки — в порядке новой вкладки, удалённые — в порядке старой.
+- **Sheets** are matched by name, **rows** by `id`. Case matters: `Sword` and `sword` are different `id` values, `Units` and `units` are different sheets.
+- Changing an `id` is removing the row with the old `id` and adding a row with the new one; renames are not detected. The row number does not take part in the comparison: reordering rows is not a change.
+- For a row present in both snapshots, fields are compared over the union of columns: first the columns of the new sheet in their order, then the removed columns in the order of the old one. Reordering columns is not a change. An added or removed column shows up as a field change in every row: on the side where the column is missing — `(missing)`.
+- Values are equal if both type and value match: arrays element by element and in order, `float` exactly, without tolerance (`1.5` and `1.50` are equal, it is the same number). Empty `enum`/`ref` values (`null`) are equal to each other. When a column's type changes (`int` → `float`), values of different types are considered a change, even if they look the same: `120 → 120`.
+- A sheet without changes is not included in the result. Order: sheets as in the new snapshot, then removed ones in the order of the old one; added and changed rows in the order of the new sheet, removed ones in the order of the old one.
 
-Текст значений: строка — в кавычках (`"Sword"`), `int` и `bool` — как есть, `float` — кратчайшая точная запись с точкой (`0.1`), пусто в `enum`/`ref` — `null`, массив — `["melee", "starter"]`, `[]`.
+Value text: a string in quotes (`"Sword"`), `int` and `bool` as is, `float` as the shortest exact form with a dot (`0.1`), empty `enum`/`ref` as `null`, an array as `["melee", "starter"]`, `[]`.
 
-Пример отчёта:
+Example report:
 
 ```
 Units: +1 -1 ~1
@@ -338,4 +338,4 @@ Units: +1 -1 ~1
 - Old (removed sheet, 2 rows)
 ```
 
-У изменённой вкладки — счётчики добавленных (`+`), удалённых (`-`) и изменённых (`~`) строк, затем сами строки. Для добавленной и удалённой вкладки строки не перечисляются, только их число. Если изменений нет — `No changes`.
+A changed sheet shows counters of added (`+`), removed (`-`) and changed (`~`) rows, followed by the rows themselves. For an added or removed sheet the rows are not listed, only their count. If there are no changes — `No changes`.
