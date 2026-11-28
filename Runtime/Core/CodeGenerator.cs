@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Kentavr.SheetsToSO.Core
 {
@@ -62,9 +64,28 @@ namespace Kentavr.SheetsToSO.Core
         }
 
         /// <summary>
-        /// Generates an enum with the given members, in the given order.
+        /// Generates an enum with the given members, in the given order, numbered 0, 1, 2…
         /// </summary>
         public static string GenerateEnum(string enumName, IReadOnlyList<string> members, CodeGenOptions options)
+        {
+            if (members == null)
+                throw new ArgumentNullException(nameof(members));
+
+            var numbered = new EnumMember[members.Count];
+            for (var i = 0; i < members.Count; i++)
+            {
+                if (members[i] == null)
+                    throw new ArgumentException($"Enum '{enumName}' member at index {i} is null", nameof(members));
+                numbered[i] = new EnumMember(members[i], i);
+            }
+            return GenerateEnum(enumName, numbered, options);
+        }
+
+        /// <summary>
+        /// Generates an enum with the given members, in the given order, each with its explicit value
+        /// (<c>Common = 0,</c>).
+        /// </summary>
+        public static string GenerateEnum(string enumName, IReadOnlyList<EnumMember> members, CodeGenOptions options)
         {
             ValidateName(enumName, nameof(enumName), "enum name");
             if (members == null)
@@ -73,30 +94,244 @@ namespace Kentavr.SheetsToSO.Core
                 throw new ArgumentNullException(nameof(options));
 
             var seen = new HashSet<string>(StringComparer.Ordinal);
+            var values = new Dictionary<int, string>();
             var text = new StringBuilder();
             for (var i = 0; i < members.Count; i++)
             {
                 var member = members[i];
                 if (member == null)
                     throw new ArgumentException($"Enum '{enumName}' member at index {i} is null", nameof(members));
-                if (!CSharpIdentifier.IsIdentifier(member))
+                var name = member.Name;
+                if (!CSharpIdentifier.IsIdentifier(name))
                     throw new ArgumentException(
-                        $"Invalid enum '{enumName}' member '{member}': use Latin letters, digits and '_', not starting with a digit",
+                        $"Invalid enum '{enumName}' member '{name}': use Latin letters, digits and '_', not starting with a digit",
                         nameof(members));
-                if (CSharpIdentifier.IsKeyword(member))
+                if (CSharpIdentifier.IsKeyword(name))
                     throw new ArgumentException(
-                        $"Enum '{enumName}' member '{member}' is a reserved C# keyword", nameof(members));
-                if (!seen.Add(member))
-                    throw new ArgumentException($"Duplicate enum '{enumName}' member '{member}'", nameof(members));
+                        $"Enum '{enumName}' member '{name}' is a reserved C# keyword", nameof(members));
+                if (!seen.Add(name))
+                    throw new ArgumentException($"Duplicate enum '{enumName}' member '{name}'", nameof(members));
+                if (values.TryGetValue(member.Value, out var other))
+                    throw new ArgumentException(
+                        $"Duplicate enum '{enumName}' value {member.Value}: members '{other}' and '{name}'", nameof(members));
+                values.Add(member.Value, name);
 
                 if (text.Length > 0)
                     text.Append('\n');
-                text.Append(MemberIndent).Append(member).Append(',');
+                text.Append(MemberIndent).Append(name).Append(" = ")
+                    .Append(member.Value.ToString(CultureInfo.InvariantCulture)).Append(',');
             }
 
             return Render(options.EnumTemplate, options.Namespace,
                 CodeTemplates.EnumNamePlaceholder, enumName,
                 CodeTemplates.MembersPlaceholder, text.ToString());
+        }
+
+        /// <summary>
+        /// Reads the members of <c>enum &lt;enumName&gt;</c> from C# source, such as a previously generated file.
+        /// Comments are skipped. A member is <c>Name</c> or <c>Name = integer</c>; without a value it is
+        /// the previous value + 1, the first one 0 (C# rules). Duplicate names or values,
+        /// any other member syntax, or no such enum give an error in the result.
+        /// </summary>
+        public static EnumReadResult ReadEnumMembers(string source, string enumName)
+        {
+            if (source == null)
+                throw new ArgumentNullException(nameof(source));
+            ValidateName(enumName, nameof(enumName), "enum name");
+
+            if (!TryStripCommentsAndStrings(source, out var code, out var stripError))
+                return EnumReadResult.Failure(stripError);
+
+            var match = Regex.Match(code,
+                @"(?<![A-Za-z0-9_@])enum\s+" + enumName + @"(?![A-Za-z0-9_])\s*(?::\s*[A-Za-z_][A-Za-z0-9_.]*\s*)?\{");
+            if (!match.Success)
+                return EnumReadResult.Failure($"no 'enum {enumName} {{ ... }}' found");
+
+            var bodyStart = match.Index + match.Length;
+            var bodyEnd = code.IndexOf('}', bodyStart);
+            if (bodyEnd < 0)
+                return EnumReadResult.Failure($"enum '{enumName}' has no closing '}}'");
+
+            var parts = code.Substring(bodyStart, bodyEnd - bodyStart).Split(',');
+            var members = new List<EnumMember>();
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            var values = new Dictionary<int, string>();
+            long next = 0;
+            for (var i = 0; i < parts.Length; i++)
+            {
+                var part = parts[i].Trim();
+                if (part.Length == 0)
+                {
+                    // A trailing comma (or an empty enum) is fine; an empty element in the middle is not.
+                    if (i == parts.Length - 1)
+                        break;
+                    return EnumReadResult.Failure($"enum '{enumName}': empty member at position {i + 1}");
+                }
+
+                var element = MemberPattern.Match(part);
+                if (!element.Success)
+                    return EnumReadResult.Failure($"enum '{enumName}': cannot read member '{part}'");
+
+                var name = element.Groups["name"].Value;
+                if (CSharpIdentifier.IsKeyword(name))
+                    return EnumReadResult.Failure($"enum '{enumName}': member '{name}' is a reserved C# keyword");
+
+                long value;
+                if (element.Groups["value"].Success)
+                {
+                    var digits = Regex.Replace(element.Groups["value"].Value, @"\s+", string.Empty);
+                    if (!long.TryParse(digits, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out value) ||
+                        value < int.MinValue || value > int.MaxValue)
+                        return EnumReadResult.Failure($"enum '{enumName}': value of member '{name}' is out of the int range");
+                }
+                else
+                {
+                    value = next;
+                    if (value > int.MaxValue)
+                        return EnumReadResult.Failure($"enum '{enumName}': value of member '{name}' is out of the int range");
+                }
+
+                if (!names.Add(name))
+                    return EnumReadResult.Failure($"enum '{enumName}': duplicate member '{name}'");
+                var intValue = (int)value;
+                if (values.TryGetValue(intValue, out var other))
+                    return EnumReadResult.Failure(
+                        $"enum '{enumName}': members '{other}' and '{name}' have the same value {intValue}");
+                values.Add(intValue, name);
+
+                members.Add(new EnumMember(name, intValue));
+                next = value + 1;
+            }
+
+            return EnumReadResult.Success(members.AsReadOnly());
+        }
+
+        /// <summary>
+        /// Keeps the previous members with their values and order, and appends the collected values
+        /// that are new, in order of appearance, numbered from the largest previous value + 1 (from 0 when none).
+        /// Previous members missing from <paramref name="collected"/> stay and are listed in <see cref="EnumMergeResult.Removed"/>.
+        /// </summary>
+        public static EnumMergeResult MergeEnumMembers(IReadOnlyList<EnumMember> previous, IReadOnlyList<string> collected)
+        {
+            if (previous == null)
+                throw new ArgumentNullException(nameof(previous));
+            if (collected == null)
+                throw new ArgumentNullException(nameof(collected));
+
+            var members = new List<EnumMember>();
+            var known = new HashSet<string>(StringComparer.Ordinal);
+            long max = -1;
+            for (var i = 0; i < previous.Count; i++)
+            {
+                var member = previous[i] ?? throw new ArgumentException($"Previous member at index {i} is null", nameof(previous));
+                if (!known.Add(member.Name))
+                    throw new ArgumentException($"Duplicate previous member '{member.Name}'", nameof(previous));
+                members.Add(member);
+                if (member.Value > max)
+                    max = member.Value;
+            }
+
+            var present = new HashSet<string>(StringComparer.Ordinal);
+            for (var i = 0; i < collected.Count; i++)
+            {
+                var name = collected[i] ?? throw new ArgumentException($"Collected value at index {i} is null", nameof(collected));
+                present.Add(name);
+                if (!known.Add(name))
+                    continue;
+
+                max++;
+                if (max > int.MaxValue)
+                    throw new ArgumentException($"No free value for new member '{name}': the largest value is {int.MaxValue}",
+                        nameof(collected));
+                members.Add(new EnumMember(name, (int)max));
+            }
+
+            var removed = new List<string>();
+            foreach (var member in previous)
+            {
+                if (!present.Contains(member.Name))
+                    removed.Add(member.Name);
+            }
+
+            return new EnumMergeResult(members.AsReadOnly(), removed.AsReadOnly());
+        }
+
+        private static readonly Regex MemberPattern = new Regex(
+            @"^(?<name>[A-Za-z_][A-Za-z0-9_]*)(?:\s*=\s*(?<value>[+-]?\s*[0-9]+))?$", RegexOptions.CultureInvariant);
+
+        // Replaces comments with a space and string/char literal contents with nothing, so that only code is searched.
+        private static bool TryStripCommentsAndStrings(string source, out string code, out string error)
+        {
+            var text = new StringBuilder(source.Length);
+            var i = 0;
+            while (i < source.Length)
+            {
+                var c = source[i];
+                var next = i + 1 < source.Length ? source[i + 1] : '\0';
+                if (c == '/' && next == '/')
+                {
+                    while (i < source.Length && source[i] != '\n')
+                        i++;
+                    text.Append(' ');
+                }
+                else if (c == '/' && next == '*')
+                {
+                    var end = source.IndexOf("*/", i + 2, StringComparison.Ordinal);
+                    if (end < 0)
+                    {
+                        code = null;
+                        error = "unterminated '/*' comment";
+                        return false;
+                    }
+                    i = end + 2;
+                    text.Append(' ');
+                }
+                else if (c == '"' || c == '\'' || (c == '@' && next == '"'))
+                {
+                    var verbatim = c == '@';
+                    var quote = verbatim ? '"' : c;
+                    i += verbatim ? 2 : 1;
+                    var closed = false;
+                    while (i < source.Length)
+                    {
+                        var s = source[i];
+                        if (verbatim && s == '"' && i + 1 < source.Length && source[i + 1] == '"')
+                        {
+                            i += 2;
+                            continue;
+                        }
+                        if (!verbatim && s == '\\')
+                        {
+                            i += 2;
+                            continue;
+                        }
+                        if (!verbatim && s == '\n')
+                            break;
+                        i++;
+                        if (s == quote)
+                        {
+                            closed = true;
+                            break;
+                        }
+                    }
+                    if (!closed)
+                    {
+                        code = null;
+                        error = "unterminated string or character literal";
+                        return false;
+                    }
+                    text.Append(quote).Append(quote);
+                }
+                else
+                {
+                    text.Append(c);
+                    i++;
+                }
+            }
+
+            code = text.ToString();
+            error = null;
+            return true;
         }
 
         /// <summary>
