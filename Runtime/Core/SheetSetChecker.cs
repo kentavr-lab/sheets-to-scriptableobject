@@ -20,7 +20,8 @@ namespace Kentavr.SheetsToSO.Core
         /// <summary>
         /// Parses and checks the sheets: names (empty, repeated ignoring case), headers and values,
         /// <c>id</c> as the first <c>string</c> column, <c>ref&lt;&gt;</c> and <c>enum&lt;&gt;</c> values across sheets
-        /// and type name conflicts of the generated code. Errors are collected, never thrown.
+        /// and type name conflicts of the generated code. Errors are collected, never thrown. Cross-sheet and type name
+        /// checks run even with parse errors, so all errors are seen at once; only sheet name errors skip them.
         /// </summary>
         /// <param name="sheets">Sheet names and raw cells; <c>Rows[0]</c> is the header. A <c>null</c> row counts as empty.</param>
         public static SheetSetCheckResult Check(IReadOnlyList<(string Name, IReadOnlyList<IReadOnlyList<string>> Rows)> sheets)
@@ -30,9 +31,13 @@ namespace Kentavr.SheetsToSO.Core
 
             var errors = new List<string>();
             var parsed = new List<SheetParseResult>();
+            var nameErrors = false;
 
             if (sheets.Count == 0)
+            {
                 errors.Add("No sheets to import");
+                nameErrors = true;
+            }
 
             // Ignore case: each sheet becomes files, and file names are case-insensitive on Windows and macOS.
             var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -41,6 +46,7 @@ namespace Kentavr.SheetsToSO.Core
                 if (string.IsNullOrEmpty(source.Name))
                 {
                     errors.Add("Sheet without a name");
+                    nameErrors = true;
                     continue;
                 }
                 if (names.TryGetValue(source.Name, out var first))
@@ -48,6 +54,7 @@ namespace Kentavr.SheetsToSO.Core
                     errors.Add(first == source.Name
                         ? $"Duplicate sheet name '{source.Name}'"
                         : $"Duplicate sheet name '{source.Name}': same as '{first}' ignoring case");
+                    nameErrors = true;
                     continue;
                 }
                 names.Add(source.Name, source.Name);
@@ -66,8 +73,9 @@ namespace Kentavr.SheetsToSO.Core
                 parsed.Add(sheet);
             }
 
-            // Rows of a sheet with errors are not reliable for cross-sheet checks.
-            if (errors.Count > 0)
+            // With a missing or repeated sheet name it is unclear which sheet a ref points to. Parse errors do not stop
+            // the checks below: see the rules in Documentation~/data-format.md, "Проверка ссылок и enum".
+            if (nameErrors)
                 return new SheetSetCheckResult(parsed.AsReadOnly(), NoEnums, errors.AsReadOnly());
 
             // Invalid enum values are reported by both the validator and CollectEnumMembers: take them from the validator only.
@@ -88,7 +96,7 @@ namespace Kentavr.SheetsToSO.Core
             foreach (var enumName in enums.EnumNames)
                 AddTypeName(typeOwners, enumName, $"enum '{enumName}'", errors);
 
-            return new SheetSetCheckResult(parsed.AsReadOnly(), enums, errors.AsReadOnly());
+            return new SheetSetCheckResult(parsed.AsReadOnly(), errors.Count == 0 ? enums : NoEnums, errors.AsReadOnly());
         }
 
         /// <summary>

@@ -20,7 +20,7 @@ namespace Kentavr.SheetsToSO.Core
         public IReadOnlyList<SheetParseResult> Sheets { get; }
 
         /// <summary>
-        /// Enums collected from the data. Empty when the sheets have parse errors;
+        /// Enums collected from the data. Empty when there are any errors;
         /// the errors of <see cref="EnumMembersResult.Errors"/> are already in <see cref="Errors"/>.
         /// </summary>
         public EnumMembersResult Enums { get; }
