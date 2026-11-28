@@ -27,8 +27,15 @@ namespace Kentavr.SheetsToSO.Editor
     [Serializable]
     public sealed class SheetImportSheet
     {
-        /// <summary>Sheet name: the row class, table class and asset are named after it.</summary>
+        /// <summary>Sheet name: the asset and, in code generation mode, the row and table classes are named after it.</summary>
         public string name;
+
+        /// <summary>
+        /// Full name of a <c>SheetTable&lt;TRow&gt;</c> subclass of the project (schema from code): rows are parsed
+        /// by the fields of <c>TRow</c>, no code is generated for the sheet, the asset is of this type.
+        /// Empty: the code of the sheet is generated.
+        /// </summary>
+        public string tableType;
 
         public List<SheetImportRow> rows = new List<SheetImportRow>();
     }
