@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Kentavr.SheetsToSO.Core;
@@ -44,9 +45,9 @@ namespace Kentavr.SheetsToSO.Core.Tests
             "{\n" +
             "    public enum Rarity\n" +
             "    {\n" +
-            "        Common,\n" +
-            "        Rare,\n" +
-            "        Epic,\n" +
+            "        Common = 0,\n" +
+            "        Rare = 1,\n" +
+            "        Epic = 2,\n" +
             "    }\n" +
             "}\n";
 
@@ -201,7 +202,7 @@ namespace Kentavr.SheetsToSO.Core.Tests
 
             var text = CodeGenerator.GenerateEnum("Rarity", new[] { "A", "B" }, options);
 
-            Assert.That(text, Is.EqualTo("enum Rarity in Game.Data:\n        A,\n        B,\n"));
+            Assert.That(text, Is.EqualTo("enum Rarity in Game.Data:\n        A = 0,\n        B = 1,\n"));
         }
 
         [Test]
@@ -272,7 +273,8 @@ namespace Kentavr.SheetsToSO.Core.Tests
             Assert.Throws<ArgumentNullException>(() => CodeGenerator.GenerateRowClass("Units", null, Options()));
             Assert.Throws<ArgumentNullException>(() => CodeGenerator.GenerateRowClass("Units", Columns(UnitsHeader), null));
             Assert.Throws<ArgumentNullException>(() => CodeGenerator.GenerateEnum(null, RarityMembers, Options()));
-            Assert.Throws<ArgumentNullException>(() => CodeGenerator.GenerateEnum("Rarity", null, Options()));
+            Assert.Throws<ArgumentNullException>(() => CodeGenerator.GenerateEnum("Rarity", (IReadOnlyList<string>)null, Options()));
+            Assert.Throws<ArgumentNullException>(() => CodeGenerator.GenerateEnum("Rarity", (IReadOnlyList<EnumMember>)null, Options()));
             Assert.Throws<ArgumentNullException>(() => CodeGenerator.GenerateEnum("Rarity", RarityMembers, null));
             Assert.Throws<ArgumentNullException>(() => CodeGenerator.CollectEnumNames(null));
         }
@@ -524,6 +526,276 @@ namespace Kentavr.SheetsToSO.Core.Tests
         {
             Assert.Throws<ArgumentNullException>(() => CodeGenerator.CollectEnumMembers(null));
             Assert.Throws<ArgumentException>(() => CodeGenerator.CollectEnumMembers(new SheetParseResult[] { null }));
+        }
+
+        // Units + Weapons as in the owner's data: 'orc' is the only early row with 'Rare'.
+        private static SheetParseResult[] GoodSheets(bool withOrc = true, bool reversed = false, string extraWeapon = null)
+        {
+            var unitRows = new List<string[]>
+            {
+                new[] { "knight", "Common" },
+                new[] { "orc", "Rare" },
+                new[] { "dragon", "Epic" },
+            };
+            if (!withOrc)
+                unitRows.RemoveAt(1);
+            if (reversed)
+                unitRows.Reverse();
+            unitRows.Insert(0, new[] { "id", "rarity:enum<Rarity>" });
+
+            var weaponRows = new List<string[]>
+            {
+                new[] { "id", "rarity:enum<Rarity>" },
+                new[] { "sword", "Common" },
+                new[] { "axe", "Rare" },
+            };
+            if (extraWeapon != null)
+                weaponRows.Add(new[] { "staff", extraWeapon });
+
+            return new[] { Sheet("Units", unitRows.ToArray()), Sheet("Weapons", weaponRows.ToArray()) };
+        }
+
+        // What the importer does for one enum: read the existing file, merge, generate.
+        private static (string Text, IReadOnlyList<EnumMember> Members, IReadOnlyList<string> Removed) Regenerate(
+            string previousText, SheetParseResult[] sheets)
+        {
+            var previous = Array.Empty<EnumMember>() as IReadOnlyList<EnumMember>;
+            if (previousText != null)
+            {
+                var read = CodeGenerator.ReadEnumMembers(previousText, "Rarity");
+                Assert.That(read.IsValid, Is.True, read.Error);
+                previous = read.Members;
+            }
+
+            var collected = CodeGenerator.CollectEnumMembers(sheets);
+            Assert.That(collected.IsValid, Is.True);
+            var merged = CodeGenerator.MergeEnumMembers(previous, collected.Members["Rarity"]);
+            return (CodeGenerator.GenerateEnum("Rarity", merged.Members, Options()), merged.Members, merged.Removed);
+        }
+
+        private static EnumMember[] Members(params (string Name, int Value)[] members) =>
+            members.Select(m => new EnumMember(m.Name, m.Value)).ToArray();
+
+        [Test]
+        public void ReorderedRowsKeepEnumText()
+        {
+            var first = Regenerate(null, GoodSheets());
+            Assert.That(first.Text, Is.EqualTo(ExpectedRarity));
+
+            var reordered = Regenerate(first.Text, GoodSheets(reversed: true));
+
+            Assert.That(reordered.Text, Is.EqualTo(first.Text));
+            Assert.That(reordered.Removed, Is.Empty);
+        }
+
+        [Test]
+        public void GoodThenV2ThenGoodKeepsEnumText()
+        {
+            var good = Regenerate(null, GoodSheets());
+            var v2 = Regenerate(good.Text, GoodSheets(withOrc: false));
+            var goodAgain = Regenerate(v2.Text, GoodSheets());
+
+            // Without the previous file, v2 alone would give Common, Epic, Rare.
+            Assert.That(Regenerate(null, GoodSheets(withOrc: false)).Members,
+                Is.EqualTo(Members(("Common", 0), ("Epic", 1), ("Rare", 2))));
+            Assert.That(v2.Text, Is.EqualTo(good.Text));
+            Assert.That(goodAgain.Text, Is.EqualTo(good.Text));
+        }
+
+        [Test]
+        public void RemovedValueStaysWithItsNumber()
+        {
+            var good = Regenerate(null, GoodSheets());
+            var units = Sheet("Units",
+                new[] { "id", "rarity:enum<Rarity>" },
+                new[] { "knight", "Common" },
+                new[] { "orc", "Rare" });
+
+            var result = Regenerate(good.Text, new[] { units });
+
+            Assert.That(result.Removed, Is.EqualTo(new[] { "Epic" }));
+            Assert.That(result.Members, Is.EqualTo(Members(("Common", 0), ("Rare", 1), ("Epic", 2))));
+            Assert.That(result.Text, Is.EqualTo(good.Text));
+        }
+
+        [Test]
+        public void NewValueIsAppendedWithMaxPlusOne()
+        {
+            var previous = CodeGenerator.GenerateEnum("Rarity", Members(("Common", 0), ("Rare", 5), ("Epic", 2)), Options());
+
+            var result = Regenerate(previous, GoodSheets(extraWeapon: "Legendary"));
+
+            Assert.That(result.Members,
+                Is.EqualTo(Members(("Common", 0), ("Rare", 5), ("Epic", 2), ("Legendary", 6))));
+            Assert.That(result.Removed, Is.Empty);
+            Assert.That(result.Text, Does.EndWith(
+                "        Epic = 2,\n" +
+                "        Legendary = 6,\n" +
+                "    }\n" +
+                "}\n"));
+        }
+
+        [Test]
+        public void MergeWithoutPreviousNumbersFromZeroInOrderOfAppearance()
+        {
+            var result = CodeGenerator.MergeEnumMembers(Array.Empty<EnumMember>(), new[] { "Rare", "Common", "Rare" });
+
+            Assert.That(result.Members, Is.EqualTo(Members(("Rare", 0), ("Common", 1))));
+            Assert.That(result.Removed, Is.Empty);
+        }
+
+        [Test]
+        public void MergeWithNegativePreviousValues()
+        {
+            var result = CodeGenerator.MergeEnumMembers(Members(("None", -1)), new[] { "A" });
+
+            Assert.That(result.Members, Is.EqualTo(Members(("None", -1), ("A", 0))));
+            Assert.That(result.Removed, Is.EqualTo(new[] { "None" }));
+        }
+
+        [Test]
+        public void MergeRejectsNullAndOverflow()
+        {
+            Assert.Throws<ArgumentNullException>(() => CodeGenerator.MergeEnumMembers(null, new[] { "A" }));
+            Assert.Throws<ArgumentNullException>(() => CodeGenerator.MergeEnumMembers(Array.Empty<EnumMember>(), null));
+            Assert.Throws<ArgumentException>(() =>
+                CodeGenerator.MergeEnumMembers(Members(("Max", int.MaxValue)), new[] { "Max", "New" }));
+        }
+
+        [Test]
+        public void ReadsOldFileWithoutNumbers()
+        {
+            // As generated before explicit values: the order of the file is kept.
+            const string old =
+                "// <auto-generated>\n" +
+                "// Generated by Kentavr.SheetsToSO. Do not edit manually: changes will be lost on the next generation.\n" +
+                "// </auto-generated>\n" +
+                "namespace Game.Data\n" +
+                "{\n" +
+                "    public enum Rarity\n" +
+                "    {\n" +
+                "        Common,\n" +
+                "        Epic,\n" +
+                "        Rare,\n" +
+                "    }\n" +
+                "}\n";
+
+            var read = CodeGenerator.ReadEnumMembers(old, "Rarity");
+            Assert.That(read.IsValid, Is.True, read.Error);
+            Assert.That(read.Members, Is.EqualTo(Members(("Common", 0), ("Epic", 1), ("Rare", 2))));
+
+            var regenerated = Regenerate(old.Replace("\n", "\r\n"), GoodSheets());
+            Assert.That(regenerated.Members, Is.EqualTo(Members(("Common", 0), ("Epic", 1), ("Rare", 2))));
+        }
+
+        [Test]
+        public void ReadsExplicitImplicitAndNegativeValues()
+        {
+            const string source =
+                "namespace X { public enum Other { A = 7 }\n" +
+                "public enum Rarity : int { None = -2, Low, Mid = 10, High, Top = - 5 } }";
+
+            var read = CodeGenerator.ReadEnumMembers(source, "Rarity");
+
+            Assert.That(read.IsValid, Is.True, read.Error);
+            Assert.That(read.Members,
+                Is.EqualTo(Members(("None", -2), ("Low", -1), ("Mid", 10), ("High", 11), ("Top", -5))));
+        }
+
+        [Test]
+        public void ReadSkipsComments()
+        {
+            const string source =
+                "// enum Rarity { Fake }\n" +
+                "/* enum Rarity { Fake2 } */\n" +
+                "const string s = \"enum Rarity { Fake3 }\";\n" +
+                "enum Rarity\n" +
+                "{\n" +
+                "    Common = 0, // the default\n" +
+                "    /* Rare = 1, */ Epic = 2,\n" +
+                "}\n";
+
+            var read = CodeGenerator.ReadEnumMembers(source, "Rarity");
+
+            Assert.That(read.IsValid, Is.True, read.Error);
+            Assert.That(read.Members, Is.EqualTo(Members(("Common", 0), ("Epic", 2))));
+        }
+
+        [Test]
+        public void ReadsEmptyEnum()
+        {
+            var text = CodeGenerator.GenerateEnum("Rarity", Array.Empty<string>(), Options());
+
+            var read = CodeGenerator.ReadEnumMembers(text, "Rarity");
+
+            Assert.That(read.IsValid, Is.True, read.Error);
+            Assert.That(read.Members, Is.Empty);
+        }
+
+        [Test]
+        public void ReadRoundTripsGeneratedEnum()
+        {
+            var members = Members(("Common", 0), ("Rare", 5), ("Epic", -3));
+            var text = CodeGenerator.GenerateEnum("Rarity", members, Options());
+
+            var read = CodeGenerator.ReadEnumMembers(text, "Rarity");
+
+            Assert.That(read.Members, Is.EqualTo(members));
+        }
+
+        [TestCase("enum Rarities { A }", "no 'enum Rarity")]
+        [TestCase("enum MyRarity { A }", "no 'enum Rarity")]
+        [TestCase("class Rarity { }", "no 'enum Rarity")]
+        [TestCase("enum Rarity { A = 1 + 2 }", "cannot read member")]
+        [TestCase("enum Rarity { [Obsolete] A }", "cannot read member")]
+        [TestCase("enum Rarity { A = 0x1 }", "cannot read member")]
+        [TestCase("enum Rarity { A,, B }", "empty member")]
+        [TestCase("enum Rarity { A, class }", "keyword")]
+        [TestCase("enum Rarity { A, B, A }", "duplicate member 'A'")]
+        [TestCase("enum Rarity { A = 1, B = 0, C }", "same value 1")]
+        [TestCase("enum Rarity { A = 99999999999 }", "int range")]
+        [TestCase("enum Rarity { A", "closing")]
+        [TestCase("enum Rarity { A } /* unterminated", "unterminated")]
+        [TestCase("garbage", "no 'enum Rarity")]
+        public void ReadReportsErrors(string source, string expected)
+        {
+            var read = CodeGenerator.ReadEnumMembers(source, "Rarity");
+
+            Assert.That(read.IsValid, Is.False);
+            Assert.That(read.Error, Does.Contain(expected));
+            Assert.That(read.Members, Is.Empty);
+        }
+
+        [Test]
+        public void ReadRejectsInvalidArguments()
+        {
+            Assert.Throws<ArgumentNullException>(() => CodeGenerator.ReadEnumMembers(null, "Rarity"));
+            Assert.Throws<ArgumentNullException>(() => CodeGenerator.ReadEnumMembers("", null));
+            Assert.Throws<ArgumentException>(() => CodeGenerator.ReadEnumMembers("", "Ra rity"));
+        }
+
+        [Test]
+        public void GenerateEnumRejectsDuplicateValue()
+        {
+            var ex = Assert.Throws<ArgumentException>(() =>
+                CodeGenerator.GenerateEnum("Rarity", Members(("Common", 0), ("Rare", 0)), Options()));
+            Assert.That(ex.Message, Does.Contain("Duplicate enum 'Rarity' value 0"));
+        }
+
+        [Test]
+        public void GeneratedEnumWithExplicitValuesCompiles()
+        {
+            var options = Options("My.Game.Data");
+            var sources = new[]
+            {
+                CodeGenerator.GenerateRowClass("Units", Columns(UnitsHeader), options),
+                CodeGenerator.GenerateEnum("Rarity",
+                    Members(("Common", 0), ("Rare", 5), ("Epic", -3), ("Max", int.MaxValue), ("Min", int.MinValue)), options),
+            };
+
+            var errors = Compile(sources);
+
+            Assert.That(errors, Is.Empty, string.Join("\n", errors));
         }
 
         private static string[] Compile(string[] sources)

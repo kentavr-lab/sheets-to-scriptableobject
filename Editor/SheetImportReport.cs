@@ -23,6 +23,9 @@ namespace Kentavr.SheetsToSO.Editor
         /// <summary>Table assets in the asset folder with no sheet in the request. Not deleted.</summary>
         public List<string> AssetsWithoutSheet { get; } = new List<string>();
 
+        /// <summary>Warnings, e.g. enum values kept although no longer in the sheets. Do not fail the import.</summary>
+        public List<string> Warnings { get; } = new List<string>();
+
         /// <summary>Errors; when any, nothing or only part of the import was applied (see the messages).</summary>
         public List<string> Errors { get; } = new List<string>();
 
@@ -47,6 +50,7 @@ namespace Kentavr.SheetsToSO.Editor
             Append(text, "Written code files", WrittenFiles);
             Append(text, "Unchanged code files", UnchangedFiles);
             Append(text, "Assets without a sheet (not deleted)", AssetsWithoutSheet);
+            Append(text, "Warnings", Warnings);
             Append(text, "Errors", Errors);
             return text.ToString();
         }
