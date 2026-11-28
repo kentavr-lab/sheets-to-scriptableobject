@@ -18,8 +18,9 @@ namespace Kentavr.SheetsToSO.Core
         /// <summary>
         /// Parses and checks the sheets: names (empty, repeated ignoring case), headers and values,
         /// <c>id</c> as the first <c>string</c> column, <c>ref&lt;&gt;</c> and <c>enum&lt;&gt;</c> values across sheets,
-        /// type name conflicts of the generated code and names of the generated <c>ref&lt;&gt;</c> properties. Errors are collected, never thrown. Cross-sheet and type name
-        /// checks run even with parse errors, so all errors are seen at once; only sheet name errors skip them.
+        /// type name conflicts of the generated code and names of the generated <c>ref&lt;&gt;</c> properties.
+        /// Errors are collected, never thrown. Cross-sheet, type name and property name checks run even with
+        /// parse errors, so all errors are seen at once; only sheet name errors skip them.
         /// </summary>
         /// <param name="sheets">Sheet names and raw cells; <c>Rows[0]</c> is the header. A <c>null</c> row counts as empty.</param>
         public static SheetSetCheckResult Check(IReadOnlyList<(string Name, IReadOnlyList<IReadOnlyList<string>> Rows)> sheets)
