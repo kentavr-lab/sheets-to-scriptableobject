@@ -289,6 +289,12 @@ namespace Kentavr.SheetsToSO.Editor
                 }
                 reason = read.Error;
             }
+            catch (ArgumentException e)
+            {
+                // Invalid enum name (e.g. a C# keyword): the same error the generator would give.
+                report.Errors.Add($"Enum '{enumName}': {e.Message}");
+                return false;
+            }
             catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
             {
                 reason = e.Message;
