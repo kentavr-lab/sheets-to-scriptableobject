@@ -421,5 +421,194 @@ namespace Kentavr.SheetsToSO.Core.Tests
 
             Assert.Throws<System.ArgumentException>(() => SheetSetChecker.Diff(Set(), current));
         }
+
+        // Schema from code.
+
+#pragma warning disable CS0649 // Fields are set through reflection only.
+        [System.Serializable]
+        private sealed class CodeUnit
+        {
+            public string id;
+            public string name;
+            public int hp;
+            public Rarity rarity;
+            public string weapon;
+            public List<string> tags;
+        }
+
+        [System.Serializable]
+        private sealed class OtherRarityRow
+        {
+            public string id;
+            public RowMapperTests.Rarity rarity;
+        }
+
+        [System.Serializable]
+        private sealed class IntIdRow
+        {
+            public int id;
+        }
+
+        private sealed class NotSerializableRow
+        {
+            public string id;
+        }
+
+        [System.Serializable]
+        private sealed class NoConstructorRow
+        {
+            public string id;
+
+            public NoConstructorRow(string id) => this.id = id;
+        }
+#pragma warning restore CS0649
+
+        private static readonly string[] CodeUnitsHeader = { "id", "name", "hp", "rarity", "weapon:ref<Weapons>", "tags" };
+
+        private static (string Name, IReadOnlyList<IReadOnlyList<string>> Rows, System.Type RowType) Code(
+            (string Name, IReadOnlyList<IReadOnlyList<string>> Rows) sheet, System.Type rowType) =>
+            (sheet.Name, sheet.Rows, rowType);
+
+        private static (string Name, IReadOnlyList<IReadOnlyList<string>> Rows, System.Type RowType) Generated(
+            (string Name, IReadOnlyList<IReadOnlyList<string>> Rows) sheet) =>
+            (sheet.Name, sheet.Rows, null);
+
+        private static (string, IReadOnlyList<IReadOnlyList<string>>) CodeUnits(params string[][] rows) =>
+            Sheet("Units", new[] { CodeUnitsHeader }.Concat(rows).ToArray());
+
+        private static string[] CodeKnight => new[] { "knight", "Knight", "120", "Epic", "w_01", "a|b" };
+
+        private static SheetSetCheckResult CheckMixed(
+            params (string Name, IReadOnlyList<IReadOnlyList<string>> Rows, System.Type RowType)[] sheets) =>
+            SheetSetChecker.Check(sheets);
+
+        [Test]
+        public void MixedSetParsesCodeSheetByClass()
+        {
+            var result = CheckMixed(Code(CodeUnits(CodeKnight), typeof(CodeUnit)), Generated(Weapons()));
+
+            Assert.That(result.IsValid, Is.True, string.Join("; ", result.Errors));
+            Assert.That(result.RowTypes["Units"], Is.EqualTo(typeof(CodeUnit)));
+            Assert.That(result.RowTypes.ContainsKey("Weapons"), Is.False);
+            Assert.That(result.Enums.EnumNames, Is.Empty, "C# enums are not generated");
+            var units = result.Sheets[0];
+            Assert.That(units.Rows[0].Values["hp"], Is.EqualTo(120));
+            Assert.That(units.Rows[0].Values["tags"], Is.EqualTo(new[] { "a", "b" }));
+        }
+
+        [Test]
+        public void MixedSetChecksRefsBetweenModes()
+        {
+            var result = CheckMixed(
+                Code(CodeUnits(new[] { "knight", "Knight", "120", "Epic", "w_09", "" }), typeof(CodeUnit)),
+                Generated(Weapons()));
+
+            Assert.That(result.Errors, Has.Count.EqualTo(1));
+            Assert.That(result.Errors[0], Does.StartWith("Units!E2: "));
+            Assert.That(result.Errors[0], Does.Contain("no row with this id in sheet 'Weapons'"));
+        }
+
+        [Test]
+        public void GeneratedSheetKeepsItsEnumsNextToCodeSheet()
+        {
+            var items = Sheet("Items", new[] { "id", "grade:enum<Quality>" }, new[] { "gem", "High" });
+
+            var result = CheckMixed(Code(CodeUnits(CodeKnight), typeof(CodeUnit)), Generated(Weapons()), Generated(items));
+
+            Assert.That(result.IsValid, Is.True, string.Join("; ", result.Errors));
+            Assert.That(result.Enums.EnumNames, Is.EqualTo(new[] { "Quality" }));
+        }
+
+        [Test]
+        public void UnknownCSharpEnumValueListsAllowedValues()
+        {
+            var result = CheckMixed(
+                Code(CodeUnits(new[] { "knight", "Knight", "120", "Legendary", "w_01", "" }), typeof(CodeUnit)),
+                Generated(Weapons()));
+
+            Assert.That(result.Errors, Has.Count.EqualTo(1));
+            Assert.That(result.Errors[0], Does.StartWith("Units!D2: "));
+            Assert.That(result.Errors[0], Does.Contain("allowed: Common, Epic"));
+        }
+
+        [Test]
+        public void TwoCSharpEnumsWithSameNameAreAnError()
+        {
+            var other = Sheet("Heroes", new[] { "id", "rarity" }, new[] { "hero", "Epic" });
+
+            var result = CheckMixed(Code(CodeUnits(CodeKnight), typeof(CodeUnit)), Generated(Weapons()),
+                Code(other, typeof(OtherRarityRow)));
+
+            Assert.That(result.Errors, Has.Count.EqualTo(1));
+            Assert.That(result.Errors[0], Does.StartWith("Heroes!B1: enum name 'Rarity' is used by two C# enums"));
+        }
+
+        [Test]
+        public void GeneratedEnumWithNameOfCSharpEnumIsAnError()
+        {
+            var items = Sheet("Items", new[] { "id", "rarity:enum<Rarity>" }, new[] { "gem", "Epic" });
+
+            var result = CheckMixed(Code(CodeUnits(CodeKnight), typeof(CodeUnit)), Generated(Weapons()), Generated(items));
+
+            Assert.That(result.Errors, Has.Count.EqualTo(1));
+            Assert.That(result.Errors[0], Does.StartWith("Items!B1: column 'rarity' uses enum<Rarity>"));
+            Assert.That(result.Enums.EnumNames, Is.Empty);
+        }
+
+        [Test]
+        public void CodeSheetTakesNoPartInTypeNameCheck()
+        {
+            // In generation mode the table class of 'Units' would be 'UnitsTable', the row class of the other sheet.
+            var unitsTable = Sheet("UnitsTable", new[] { "id" }, new[] { "a" });
+
+            Assert.That(SheetSetChecker.Check(Set(Units(Knight), Weapons(), unitsTable)).Errors,
+                Has.Some.Contains("Type name 'UnitsTable'"));
+
+            var result = CheckMixed(Code(CodeUnits(CodeKnight), typeof(CodeUnit)), Generated(Weapons()),
+                Generated(unitsTable));
+
+            Assert.That(result.IsValid, Is.True, string.Join("; ", result.Errors));
+        }
+
+        [Test]
+        public void RowClassMustBeSerializable()
+        {
+            var result = CheckMixed(Code(Sheet("Units", new[] { "id" }, new[] { "a" }), typeof(NotSerializableRow)));
+
+            Assert.That(result.Errors, Has.Count.EqualTo(1));
+            Assert.That(result.Errors[0], Does.StartWith("Sheet 'Units': row class "));
+            Assert.That(result.Errors[0], Does.Contain("[Serializable]"));
+        }
+
+        [Test]
+        public void RowClassNeedsParameterlessConstructor()
+        {
+            var result = CheckMixed(Code(Sheet("Units", new[] { "id" }, new[] { "a" }), typeof(NoConstructorRow)));
+
+            Assert.That(result.Errors, Has.Count.EqualTo(1));
+            Assert.That(result.Errors[0], Does.Contain("public parameterless constructor"));
+        }
+
+        [Test]
+        public void CodeSheetKeepsIdChecks()
+        {
+            var result = CheckMixed(Code(Sheet("Units", new[] { "id" }, new[] { "1" }), typeof(IntIdRow)));
+
+            Assert.That(result.Errors, Has.Some.Contains("column 'id' must be of type 'string'"));
+        }
+
+        [Test]
+        public void DiffParsesSnapshotOfCodeSheetByClass()
+        {
+            var current = CheckMixed(Code(CodeUnits(CodeKnight), typeof(CodeUnit)), Generated(Weapons()));
+            Assert.That(current.IsValid, Is.True, string.Join("; ", current.Errors));
+
+            var same = SheetSetChecker.Diff(Set(CodeUnits(CodeKnight), Weapons()), current);
+            Assert.That(same.Text, Is.EqualTo("No changes"));
+
+            var changed = SheetSetChecker.Diff(
+                Set(CodeUnits(new[] { "knight", "Knight", "100", "Epic", "w_01", "a|b" }), Weapons()), current);
+            Assert.That(changed.Text, Is.EqualTo("Units: +0 -0 ~1\n  ~ knight: hp: 100 → 120"));
+        }
     }
 }

@@ -38,6 +38,10 @@ namespace Kentavr.SheetsToSO.Editor
             public SheetImportRequest Request;
             public CodeGenOptions Options;
             public SheetSetCheckResult Checked;
+
+            /// <summary>Table types of the sheets in schema-from-code mode, by sheet name.</summary>
+            public Dictionary<string, Type> CodeTableTypes = new Dictionary<string, Type>(StringComparer.Ordinal);
+
             public IReadOnlyList<SheetParseResult> Sheets => Checked.Sheets;
             public EnumMembersResult Enums => Checked.Enums;
         }
@@ -185,20 +189,67 @@ namespace Kentavr.SheetsToSO.Editor
                 errors.Add(e.Message);
             }
 
-            prepared.Checked = SheetSetChecker.Check(ToCheckInput(prepared.Request.sheets));
+            ResolveTableTypes(prepared.Request.sheets, prepared.CodeTableTypes, errors);
+
+            var input = prepared.Request.sheets
+                .Select(sheet => (
+                    sheet?.name,
+                    Rows(sheet),
+                    sheet?.name != null && prepared.CodeTableTypes.TryGetValue(sheet.name, out var tableType)
+                        ? GetRowType(tableType)
+                        : null))
+                .ToList();
+            prepared.Checked = SheetSetChecker.Check(input);
             errors.AddRange(prepared.Checked.Errors);
             return prepared;
+        }
+
+        // Table types picked for the sheets (schema from code), by sheet name. A type that is not a
+        // non-abstract SheetTable<> subclass of the project is an error; the sheet is then checked as generated.
+        // A repeated sheet name keeps the first type: the checker reports the repeated name anyway.
+        private static void ResolveTableTypes(List<SheetImportSheet> sheets, Dictionary<string, Type> result,
+            List<string> errors)
+        {
+            Dictionary<string, Type> byName = null;
+            foreach (var sheet in sheets)
+            {
+                if (sheet == null || string.IsNullOrEmpty(sheet.name) || string.IsNullOrWhiteSpace(sheet.tableType) ||
+                    result.ContainsKey(sheet.name))
+                    continue;
+
+                byName = byName ?? FindTableTypes().ToDictionary(type => type.FullName, StringComparer.Ordinal);
+                var fullName = sheet.tableType.Trim();
+                if (byName.TryGetValue(fullName, out var type))
+                    result.Add(sheet.name, type);
+                else
+                    errors.Add($"Sheet '{sheet.name}': table type '{fullName}' not found: it must be a non-abstract " +
+                        "subclass of SheetTable<> in the project; check compile errors in the Console or pick another type");
+            }
+        }
+
+        /// <summary>Non-abstract <see cref="SheetTable{TRow}"/> subclasses of the project, ordered by full name.</summary>
+        internal static List<Type> FindTableTypes()
+        {
+            var byName = new Dictionary<string, Type>(StringComparer.Ordinal);
+            foreach (var type in TypeCache.GetTypesDerivedFrom<ScriptableObject>())
+            {
+                if (!type.IsAbstract && !type.ContainsGenericParameters && type.FullName != null &&
+                    GetRowType(type) != null && !byName.ContainsKey(type.FullName))
+                    byName.Add(type.FullName, type);
+            }
+            return byName.Values.OrderBy(type => type.FullName, StringComparer.Ordinal).ToList();
         }
 
         private static IReadOnlyList<(string Name, IReadOnlyList<IReadOnlyList<string>> Rows)> ToCheckInput(
             List<SheetImportSheet> sheets)
         {
-            return sheets
-                .Select(sheet => (
-                    sheet?.name,
-                    (IReadOnlyList<IReadOnlyList<string>>)(sheet?.rows ?? new List<SheetImportRow>())
-                        .Select(row => (IReadOnlyList<string>)(row?.cells ?? new List<string>()))
-                        .ToList()))
+            return sheets.Select(sheet => (sheet?.name, Rows(sheet))).ToList();
+        }
+
+        private static IReadOnlyList<IReadOnlyList<string>> Rows(SheetImportSheet sheet)
+        {
+            return (sheet?.rows ?? new List<SheetImportRow>())
+                .Select(row => (IReadOnlyList<string>)(row?.cells ?? new List<string>()))
                 .ToList();
         }
 
@@ -225,6 +276,10 @@ namespace Kentavr.SheetsToSO.Editor
 
             foreach (var sheet in prepared.Sheets)
             {
+                // Schema from code: the classes are written by the user.
+                if (prepared.CodeTableTypes.ContainsKey(sheet.SheetName))
+                    continue;
+
                 var rowClass = sheet.SheetName;
                 var tableClass = rowClass + CodeGenerator.TableSuffix;
                 try
@@ -307,6 +362,10 @@ namespace Kentavr.SheetsToSO.Editor
         // Writes only files whose text differs, so unchanged code does not trigger a recompile.
         private static bool WriteFiles(string folder, List<KeyValuePair<string, string>> files, SheetImportReport report)
         {
+            // Only sheets with a picked table type: no code folder is needed.
+            if (files.Count == 0)
+                return false;
+
             Directory.CreateDirectory(folder);
             var changed = false;
             foreach (var file in files)
@@ -327,16 +386,17 @@ namespace Kentavr.SheetsToSO.Editor
         private static bool TryFindTableTypes(PreparedImport prepared, SheetImportReport report, bool afterReload,
             out Dictionary<string, Type> tableTypes)
         {
-            var byName = new Dictionary<string, Type>(StringComparer.Ordinal);
-            foreach (var type in TypeCache.GetTypesDerivedFrom<ScriptableObject>())
-            {
-                if (!type.IsAbstract && type.FullName != null && GetRowType(type) != null && !byName.ContainsKey(type.FullName))
-                    byName.Add(type.FullName, type);
-            }
+            var byName = FindTableTypes().ToDictionary(type => type.FullName, StringComparer.Ordinal);
 
             tableTypes = new Dictionary<string, Type>(StringComparer.Ordinal);
             foreach (var sheet in prepared.Sheets)
             {
+                if (prepared.CodeTableTypes.TryGetValue(sheet.SheetName, out var codeType))
+                {
+                    tableTypes.Add(sheet.SheetName, codeType);
+                    continue;
+                }
+
                 var fullName = prepared.Options.Namespace + "." + sheet.SheetName + CodeGenerator.TableSuffix;
                 if (byName.TryGetValue(fullName, out var type))
                 {
@@ -447,7 +507,10 @@ namespace Kentavr.SheetsToSO.Editor
 
                     var target = column.Type.TypeName;
                     var targetPath = $"{folder}/{target}.asset";
-                    var expectedType = prepared.Options.Namespace + "." + target + CodeGenerator.TableSuffix;
+                    // A sheet in schema-from-code mode has a hand-written table class.
+                    var expectedType = prepared.CodeTableTypes.TryGetValue(target, out var codeTableType)
+                        ? codeTableType.FullName
+                        : prepared.Options.Namespace + "." + target + CodeGenerator.TableSuffix;
                     if (!found.TryGetValue(target, out var table))
                     {
                         var loaded = AssetDatabase.LoadMainAssetAtPath(targetPath);
