@@ -74,6 +74,123 @@ namespace Kentavr.SheetsToSO.Core.Tests
         }
 
         [Test]
+        public void ParseErrorAndBrokenRefAreReportedTogether()
+        {
+            var result = SheetSetChecker.Check(Set(
+                Units(new[] { "knight", "Knight", "abc", "Epic", "w_01" }, new[] { "archer", "Archer", "60", "", "sword_02" }),
+                Weapons()));
+
+            Assert.That(result.Errors, Has.Count.EqualTo(2), string.Join("; ", result.Errors));
+            Assert.That(result.Errors[0], Does.StartWith("Units!C2: "));
+            Assert.That(result.Errors[1], Does.StartWith("Units!E3: ").And.Contain("sword_02"));
+            Assert.That(result.Enums.EnumNames, Is.Empty);
+        }
+
+        [Test]
+        public void RefToRowWithErrorInOtherCellIsValid()
+        {
+            var weapons = Sheet("Weapons", WeaponsHeader, new[] { "w_01", "abc" });
+
+            var result = SheetSetChecker.Check(Set(Units(Knight), weapons));
+
+            Assert.That(result.Errors, Has.Count.EqualTo(1), string.Join("; ", result.Errors));
+            Assert.That(result.Errors[0], Does.StartWith("Weapons!B2: "));
+        }
+
+        [TestCase("bad id")]
+        [TestCase("")]
+        public void BrokenRefInRowWithBadIdIsReported(string id)
+        {
+            var result = SheetSetChecker.Check(Set(Units(new[] { id, "Orc", "5", "", "w_99" }), Weapons()));
+
+            Assert.That(result.Errors, Has.Count.EqualTo(2), string.Join("; ", result.Errors));
+            Assert.That(result.Errors[0], Does.StartWith("Units!A2: "));
+            Assert.That(result.Errors[1], Does.StartWith("Units!E2: ").And.Contain("w_99"));
+        }
+
+        [Test]
+        public void RefToInvalidIdIsNotBroken()
+        {
+            var weapons = Sheet("Weapons", WeaponsHeader, new[] { "sword 1", "10" });
+
+            var result = SheetSetChecker.Check(Set(Units(new[] { "knight", "Knight", "1", "", "sword 1" }), weapons));
+
+            Assert.That(result.Errors, Has.Count.EqualTo(1), string.Join("; ", result.Errors));
+            Assert.That(result.Errors[0], Does.StartWith("Weapons!A2: ").And.Contain("Invalid id"));
+        }
+
+        [Test]
+        public void RefToDuplicateIdIsNotBroken()
+        {
+            var weapons = Sheet("Weapons", WeaponsHeader, new[] { "w_01", "10" }, new[] { "w_01", "20" });
+
+            var result = SheetSetChecker.Check(Set(Units(Knight), weapons));
+
+            Assert.That(result.Errors, Has.Count.EqualTo(1), string.Join("; ", result.Errors));
+            Assert.That(result.Errors[0], Does.StartWith("Weapons!A3: ").And.Contain("Duplicate id"));
+        }
+
+        [Test]
+        public void RowWithEmptyIdIsNotARefTarget()
+        {
+            var weapons = Sheet("Weapons", WeaponsHeader, new[] { "w_01", "10" }, new[] { "", "20" });
+
+            var result = SheetSetChecker.Check(Set(Units(new[] { "knight", "Knight", "1", "", "" }), weapons));
+
+            Assert.That(result.Errors, Has.Count.EqualTo(1), string.Join("; ", result.Errors));
+            Assert.That(result.Errors[0], Does.StartWith("Weapons!A3: "));
+        }
+
+        [Test]
+        public void RefsToSheetWithBrokenIdHeaderAreNotChecked()
+        {
+            var weapons = Sheet("Weapons", new[] { "id:strng", "damage:int" }, new[] { "w_01", "10" });
+            var items = Sheet("Items", new[] { "id", "rarity:enum<Rarity>", "weapon:ref<Weapons>" },
+                new[] { "sword", "1st", "w_77" });
+
+            var result = SheetSetChecker.Check(Set(items, weapons));
+
+            var itemErrors = result.Errors.Where(error => error.StartsWith("Items!")).ToList();
+            Assert.That(itemErrors, Has.Count.EqualTo(1), string.Join("; ", result.Errors));
+            Assert.That(itemErrors[0], Does.StartWith("Items!B2: ").And.Contain("1st"));
+            Assert.That(result.Errors, Has.Some.StartsWith("Weapons!A1: "));
+            Assert.That(result.Errors, Has.None.Contain("w_77"));
+        }
+
+        [Test]
+        public void RefsToSheetWithBrokenOtherHeaderAreChecked()
+        {
+            var weapons = Sheet("Weapons", new[] { "id", "damage:integer" }, new[] { "w_01", "10" });
+
+            var result = SheetSetChecker.Check(Set(Units(new[] { "knight", "Knight", "1", "", "w_99" }), weapons));
+
+            Assert.That(result.Errors, Has.Count.EqualTo(2), string.Join("; ", result.Errors));
+            Assert.That(result.Errors[0], Does.StartWith("Weapons!B1: "));
+            Assert.That(result.Errors[1], Does.StartWith("Units!E2: ").And.Contain("w_99"));
+        }
+
+        [Test]
+        public void DuplicateSheetNameSkipsCrossSheetChecks()
+        {
+            var result = SheetSetChecker.Check(Set(Units(new[] { "knight", "Knight", "1", "", "w_99" }), Weapons(), Weapons()));
+
+            Assert.That(result.Errors, Is.EqualTo(new[] { "Duplicate sheet name 'Weapons'" }));
+        }
+
+        [Test]
+        public void TypeNameConflictIsReportedWithParseErrors()
+        {
+            var result = SheetSetChecker.Check(Set(
+                Sheet("Weapons", WeaponsHeader, new[] { "w_01", "abc" }),
+                Sheet("WeaponsTable", WeaponsHeader, new[] { "w_01", "1" })));
+
+            Assert.That(result.Errors, Has.Count.EqualTo(2), string.Join("; ", result.Errors));
+            Assert.That(result.Errors[0], Does.StartWith("Weapons!B2: "));
+            Assert.That(result.Errors[1], Does.StartWith("Type name 'WeaponsTable'"));
+            Assert.That(result.Enums.EnumNames, Is.Empty);
+        }
+
+        [Test]
         public void IdMustBeStringColumn()
         {
             var result = SheetSetChecker.Check(Set(Sheet("Levels", new[] { "id:int", "name" }, new[] { "1", "One" })));

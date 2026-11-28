@@ -9,8 +9,14 @@ namespace Kentavr.SheetsToSO.Core
     /// </summary>
     public static class CrossSheetValidator
     {
+        private const string IdColumnName = "id";
+
         /// <summary>
         /// Validates references and enum values of all sheets and collects all errors at once.
+        /// Works on sheets with parse errors too (see Documentation~/data-format.md, "Проверка ссылок и enum"):
+        /// cells that failed to parse hold <c>null</c> or an empty array and are skipped; any non-empty row <c>id</c>,
+        /// even an invalid or repeated one, is a ref target; a sheet without an <c>id</c> column among its parsed
+        /// columns is not a ref target, so refs to it are not checked and give no errors.
         /// </summary>
         /// <param name="sheets">Parsed sheets; names must be unique. Parse errors of a sheet are not copied to the result.</param>
         /// <param name="knownEnums">
@@ -28,6 +34,7 @@ namespace Kentavr.SheetsToSO.Core
             if (sheets == null)
                 throw new ArgumentNullException(nameof(sheets));
 
+            // A null id set marks a loaded sheet without an 'id' column: it is not a reliable ref target.
             var idsBySheet = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
             foreach (var sheet in sheets)
             {
@@ -35,6 +42,12 @@ namespace Kentavr.SheetsToSO.Core
                     throw new ArgumentException("Sheets must not contain null.", nameof(sheets));
                 if (idsBySheet.ContainsKey(sheet.SheetName))
                     throw new ArgumentException($"Duplicate sheet name '{sheet.SheetName}'.", nameof(sheets));
+
+                if (!HasIdColumn(sheet))
+                {
+                    idsBySheet.Add(sheet.SheetName, null);
+                    continue;
+                }
 
                 var ids = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var row in sheet.Rows)
@@ -71,13 +84,15 @@ namespace Kentavr.SheetsToSO.Core
                     var type = column.Type;
                     if (type.Kind == ColumnKind.Ref)
                     {
-                        if (!idsBySheet.ContainsKey(type.TypeName))
+                        if (!idsBySheet.TryGetValue(type.TypeName, out var targetIds))
                         {
                             errors.Add(new SheetError(sheet.SheetName, new CellError(CellErrorCode.UnknownRefSheet,
                                 column.Address,
                                 $"Column '{column.Name}': sheet '{type.TypeName}' from {type} is not among the loaded sheets")));
                             continue;
                         }
+                        if (targetIds == null)
+                            continue;
                         checkedColumns.Add(column);
                     }
                     else if (type.Kind == ColumnKind.Enum)
@@ -123,6 +138,16 @@ namespace Kentavr.SheetsToSO.Core
             var collectedResult = collected.ToDictionary(
                 pair => pair.Key, pair => (IReadOnlyList<string>)pair.Value.AsReadOnly(), StringComparer.Ordinal);
             return new CrossSheetResult(errors.AsReadOnly(), collectedResult);
+        }
+
+        private static bool HasIdColumn(SheetParseResult sheet)
+        {
+            foreach (var column in sheet.Columns)
+            {
+                if (column.Name == IdColumnName)
+                    return true;
+            }
+            return false;
         }
 
         private static void CheckValue(string sheetName, ColumnDefinition column, string value, string subject,
