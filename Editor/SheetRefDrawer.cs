@@ -16,7 +16,6 @@ namespace Kentavr.SheetsToSO.Editor
     [CustomPropertyDrawer(typeof(SheetRefAttribute))]
     internal sealed class SheetRefDrawer : PropertyDrawer
     {
-        private const string EmptyText = "(пусто)";
         private const string MixedText = "—";
 
         // Table type + requested path -> found asset and its ids.
@@ -77,13 +76,13 @@ namespace Kentavr.SheetsToSO.Editor
 
             var mixed = property.hasMultipleDifferentValues;
             var value = property.stringValue;
-            var content = new GUIContent(mixed ? MixedText : string.IsNullOrEmpty(value) ? EmptyText : value);
+            var content = new GUIContent(mixed ? MixedText : string.IsNullOrEmpty(value) ? L.T(TextKey.SheetRefEmpty) : value);
             var style = EditorStyles.popup;
 
             if (!mixed && SheetRefChoices.Classify(value, entry.IdSet) == SheetRefState.Missing)
             {
                 content.image = EditorGUIUtility.IconContent("console.erroricon.sml").image;
-                content.tooltip = $"'{value}': нет строки в {entry.TableName} ({entry.Path})";
+                content.tooltip = L.T(TextKey.SheetRefMissingRow, value, entry.TableName, entry.Path);
                 style = MissingStyle;
             }
 
@@ -144,21 +143,29 @@ namespace Kentavr.SheetsToSO.Editor
             var sheetRef = (SheetRefAttribute)attribute;
 
             if (property.propertyType != SerializedPropertyType.String)
-                return View.Fallback("[SheetRef] работает только с полями string, string[] и List<string>");
+                return View.Fallback(L.T(TextKey.SheetRefNotString));
 
             var tableType = sheetRef.TableType;
             if (tableType == null || tableType.IsAbstract || tableType.ContainsGenericParameters ||
                 SheetAssetImporter.GetRowType(tableType) == null)
             {
                 var name = tableType == null ? "null" : tableType.FullName;
-                return View.Fallback($"[SheetRef]: тип {name} должен быть неабстрактным наследником SheetTable<>");
+                return View.Fallback(L.T(TextKey.SheetRefInvalidType, name));
             }
 
+            // Texts of the pick are built here, not taken from SheetRefAssetPick: they follow the editor language.
             var entry = GetEntry(tableType, sheetRef.Asset);
             if (entry.Pick.Error != null)
-                return View.Fallback(entry.Pick.Error);
+            {
+                return View.Fallback(string.IsNullOrWhiteSpace(sheetRef.Asset)
+                    ? L.T(TextKey.SheetRefNoAsset, entry.TableName)
+                    : L.T(TextKey.SheetRefNoAssetAtPath, entry.TableName, sheetRef.Asset.Trim()));
+            }
 
-            return new View { Entry = entry, Message = entry.Pick.Warning };
+            var warning = entry.Pick.Warning != null
+                ? L.T(TextKey.SheetRefSeveralAssets, entry.FoundCount, entry.TableName, entry.Path)
+                : null;
+            return new View { Entry = entry, Message = warning };
         }
 
         private static Entry GetEntry(Type tableType, string requested)
@@ -194,6 +201,9 @@ namespace Kentavr.SheetsToSO.Editor
 
             public string TableName { get; private set; }
 
+            /// <summary>Number of different asset paths found, as counted by <see cref="SheetRefChoices.PickAsset"/>.</summary>
+            public int FoundCount { get; private set; }
+
             public string Path => Pick.Path;
 
             public Object Table { get; private set; }
@@ -221,6 +231,7 @@ namespace Kentavr.SheetsToSO.Editor
                 var entry = new Entry
                 {
                     TableName = tableType.Name,
+                    FoundCount = paths.Where(path => !string.IsNullOrEmpty(path)).Distinct(StringComparer.Ordinal).Count(),
                     Pick = SheetRefChoices.PickAsset(paths, requested, tableType.Name),
                 };
 
@@ -270,7 +281,7 @@ namespace Kentavr.SheetsToSO.Editor
             protected override AdvancedDropdownItem BuildRoot()
             {
                 var root = new AdvancedDropdownItem(title);
-                root.AddChild(new IdItem(EmptyText, string.Empty));
+                root.AddChild(new IdItem(L.T(TextKey.SheetRefEmpty), string.Empty));
                 foreach (var id in ids)
                     root.AddChild(new IdItem(id, id));
 

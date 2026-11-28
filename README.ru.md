@@ -53,7 +53,7 @@ if (unitsTable.TryGet("knight", out var knight))
 
 ## Окно импорта
 
-*Window → Sheets to SO → Import*: выберите источник (Google API, Export или CSV-файлы) и вкладки, нажмите «Проверить» — увидите ошибки и diff, затем «Применить». Подробности — в разделе [Import window](README.md#import-window).
+*Window → Sheets to SO → Import*: выберите источник (Google API, Export или CSV-файлы) и вкладки, нажмите «Проверить» — увидите ошибки и diff, затем «Применить». Язык интерфейса переключается в самом окне (EN/RU), по умолчанию английский. Подробности — в разделе [Import window](README.md#import-window).
 
 ## Документация
 

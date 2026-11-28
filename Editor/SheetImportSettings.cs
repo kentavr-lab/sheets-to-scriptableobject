@@ -5,12 +5,12 @@ using UnityEngine;
 
 namespace Kentavr.SheetsToSO.Editor
 {
-    /// <summary>Where the import window loads sheets from.</summary>
+    /// <summary>Where the import window loads sheets from. The window shows translated names, see <see cref="TextKey"/>.</summary>
     internal enum SheetSourceKind
     {
         [InspectorName("Google API")] GoogleApi,
         [InspectorName("Export")] Export,
-        [InspectorName("CSV-файлы")] CsvFiles,
+        [InspectorName("CSV files")] CsvFiles,
     }
 
     /// <summary>Sheet in a list with a check box.</summary>

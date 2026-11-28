@@ -123,6 +123,7 @@ public class Unit : MonoBehaviour
 
 *Window → Sheets to SO → Import*. From top to bottom:
 
+- **Language** — the **EN** / **RU** switch on the right of the first line. It translates everything the package shows in the editor by itself: this window (labels, buttons, hints, results), the confirmation dialog, the *Import CSV folder here…* menu item and the `[SheetRef]` messages in the Inspector. Data errors and warnings, the diff and the import report in the Console stay in English, the same as in the [command-line check](#command-line-check-ci). The change applies at once, without a restart, and keeps the settings and the check result. The choice is stored per computer in `EditorPrefs` (key `Kentavr.SheetsToSO.Language`); the default is English. The Russian names are given below in «».
 - **Source** («Источник»):
   - *Google API* — spreadsheet ID and API key (Google Sheets API, the spreadsheet is shared as *Anyone with the link — Viewer*). **Refresh sheet list** («Обновить список вкладок») reads the spreadsheet's sheets.
   - *Export* — spreadsheet ID and a manual list of sheets: the sheet name and its `gid` (the number after `gid=` in the sheet URL). No key is needed; each sheet is loaded by the CSV export link.
@@ -137,7 +138,7 @@ public class Unit : MonoBehaviour
 
 ### Import a CSV folder (temporary command)
 
-The main way to import is the window above; the command is kept for the time being. Right-click a folder in the Project window → *Sheets to SO → Import CSV folder here…* → select a folder on disk with `.csv`/`.tsv` files. Each file is a sheet (the file name without extension; files starting with `#` are skipped). Assets are created in the selected folder (`Units.asset`), code in its `Generated/` subfolder, the namespace is `SheetsData`. Running it again updates the assets in place. Details are in the [Import](Documentation~/data-format.md#import) section of the data format.
+The main way to import is the window above; the command is kept for the time being. Right-click a folder in the Project window → *Sheets to SO → Import CSV folder here…* (with the RU language — «Импортировать сюда папку CSV…») → select a folder on disk with `.csv`/`.tsv` files. Each file is a sheet (the file name without extension; files starting with `#` are skipped). Assets are created in the selected folder (`Units.asset`), code in its `Generated/` subfolder, the namespace is `SheetsData`. Running it again updates the assets in place. Details are in the [Import](Documentation~/data-format.md#import) section of the data format.
 
 ## Command-line check (CI)
 
@@ -193,11 +194,12 @@ Unity does not import the `Cli~/`, `Documentation~/` and `Tests~/` folders.
 
 ## Tests
 
-The core is tested without Unity: the `Tests~/Core` project compiles the same sources from `Runtime/Core/` as Unity does. From the repository root:
+The core is tested without Unity: the `Tests~/Core` project compiles the same sources from `Runtime/Core/` as Unity does. `Tests~/Editor.Tests` checks the editor string tables from `Editor/Localization/` (every language has every text, with the same placeholders as English). From the repository root:
 
 ```
 dotnet test "Tests~/Core.Tests"
 dotnet test "Tests~/Cli.Tests"
+dotnet test "Tests~/Editor.Tests"
 ```
 
 Requires .NET SDK 8.0 or newer.
