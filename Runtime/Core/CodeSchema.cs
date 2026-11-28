@@ -27,13 +27,7 @@ namespace Kentavr.SheetsToSO.Core
                 throw new ArgumentNullException(nameof(headerColumns));
 
             var fields = GetSerializedFields(rowType);
-            var byName = new Dictionary<string, FieldInfo>(StringComparer.Ordinal);
-            foreach (var field in fields)
-            {
-                // A field of a derived class hides a base field with the same name.
-                if (!byName.ContainsKey(field.Name))
-                    byName.Add(field.Name, field);
-            }
+            var byName = FieldsByName(fields);
 
             var columns = new List<ColumnDefinition>();
             var errors = new List<HeaderError>();
@@ -81,6 +75,37 @@ namespace Kentavr.SheetsToSO.Core
             return new CodeSchemaResult(columns.AsReadOnly(), errors.AsReadOnly());
         }
 
+        /// <summary>
+        /// Serialized fields of <paramref name="rowType"/> by name (ordinal); a field of a derived class
+        /// hides a base field with the same name. Shared with <see cref="RowMapper"/>.
+        /// </summary>
+        internal static Dictionary<string, FieldInfo> GetSerializedFieldsByName(Type rowType)
+        {
+            return FieldsByName(GetSerializedFields(rowType));
+        }
+
+        /// <summary>Element type of a one-dimensional array or <c>List&lt;T&gt;</c>; <c>null</c> for other types.</summary>
+        internal static Type GetCollectionElementType(Type type)
+        {
+            if (type.IsArray && type.GetArrayRank() == 1)
+                return type.GetElementType();
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
+                return type.GetGenericArguments()[0];
+            return null;
+        }
+
+        private static Dictionary<string, FieldInfo> FieldsByName(List<FieldInfo> fields)
+        {
+            var byName = new Dictionary<string, FieldInfo>(StringComparer.Ordinal);
+            foreach (var field in fields)
+            {
+                // Fields come most derived class first: a derived field hides a base field with the same name.
+                if (!byName.ContainsKey(field.Name))
+                    byName.Add(field.Name, field);
+            }
+            return byName;
+        }
+
         // Instance fields Unity would serialize, most derived class first.
         private static List<FieldInfo> GetSerializedFields(Type rowType)
         {
@@ -115,12 +140,7 @@ namespace Kentavr.SheetsToSO.Core
             if (TryGetScalarType(type, false, out columnType))
                 return true;
 
-            Type element = null;
-            if (type.IsArray && type.GetArrayRank() == 1)
-                element = type.GetElementType();
-            else if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
-                element = type.GetGenericArguments()[0];
-
+            var element = GetCollectionElementType(type);
             return element != null && TryGetScalarType(element, true, out columnType);
         }
 
