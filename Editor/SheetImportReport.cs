@@ -14,6 +14,9 @@ namespace Kentavr.SheetsToSO.Editor
         /// <summary>Existing assets whose rows were replaced.</summary>
         public List<string> UpdatedAssets { get; } = new List<string>();
 
+        /// <summary>Existing assets left as is: same rows.</summary>
+        public List<string> UnchangedAssets { get; } = new List<string>();
+
         /// <summary>Generated code files written because their text changed.</summary>
         public List<string> WrittenFiles { get; } = new List<string>();
 
@@ -57,6 +60,7 @@ namespace Kentavr.SheetsToSO.Editor
 
             Append(text, "Created assets", CreatedAssets);
             Append(text, "Updated assets", UpdatedAssets);
+            Append(text, "Unchanged assets", UnchangedAssets);
             Append(text, "Written code files", WrittenFiles);
             Append(text, "Unchanged code files", UnchangedFiles);
             Append(text, "Assets without a sheet (not deleted)", AssetsWithoutSheet);

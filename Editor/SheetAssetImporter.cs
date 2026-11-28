@@ -386,7 +386,16 @@ namespace Kentavr.SheetsToSO.Editor
                         continue;
                     }
 
-                    ((ISheetTableData)existing).SetRows(rows);
+                    var table = (ISheetTableData)existing;
+                    if (SameRows(table.RowsData, rows))
+                    {
+                        report.UnchangedAssets.Add(path);
+                        // Rows are the same, but the linked tables may still need an update.
+                        applied.Add(sheet.SheetName, existing);
+                        continue;
+                    }
+
+                    table.SetRows(rows);
                     EditorUtility.SetDirty(existing);
                     report.UpdatedAssets.Add(path);
                     applied.Add(sheet.SheetName, existing);
@@ -459,9 +468,34 @@ namespace Kentavr.SheetsToSO.Editor
                         linked.Add(table);
                 }
 
+                if (asset is SheetTableBase current && current.LinkedTables.SequenceEqual(linked))
+                    continue;
+
                 ((ISheetTableData)asset).SetLinkedTables(linked);
                 EditorUtility.SetDirty(asset);
             }
+        }
+
+        // Rows are [Serializable] classes: compare them as the asset serializer sees them.
+        private static bool SameRows(System.Collections.IList current, List<object> rows)
+        {
+            var count = current?.Count ?? 0;
+            if (count != rows.Count)
+                return false;
+
+            for (var i = 0; i < count; i++)
+            {
+                if (current[i] == null || rows[i] == null)
+                {
+                    if (!ReferenceEquals(current[i], rows[i]))
+                        return false;
+                    continue;
+                }
+                if (JsonUtility.ToJson(current[i]) != JsonUtility.ToJson(rows[i]))
+                    return false;
+            }
+
+            return true;
         }
 
         private static string SnapshotPath(string assetFolder) =>

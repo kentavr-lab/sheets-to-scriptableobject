@@ -47,6 +47,8 @@ namespace Kentavr.SheetsToSO
 
         System.Type ISheetTableData.RowType => typeof(TRow);
 
+        System.Collections.IList ISheetTableData.RowsData => rows;
+
         void ISheetTableData.SetRows(System.Collections.IList newRows)
         {
             var list = new List<TRow>(newRows == null ? 0 : newRows.Count);
@@ -119,6 +121,9 @@ namespace Kentavr.SheetsToSO
     {
         /// <summary>Row class of the table.</summary>
         System.Type RowType { get; }
+
+        /// <summary>Current rows in list order; <c>null</c> when the list is not set.</summary>
+        System.Collections.IList RowsData { get; }
 
         /// <summary>Replaces all rows and rebuilds the id index. Every item must be a <see cref="RowType"/>.</summary>
         void SetRows(System.Collections.IList rows);
