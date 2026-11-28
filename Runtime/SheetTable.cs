@@ -8,8 +8,9 @@ namespace Kentavr.SheetsToSO
     /// Base ScriptableObject for one sheet tab: a serialized list of rows with lookup by id.
     /// Concrete tables close the generic type: <c>public sealed class UnitsTable : SheetTable&lt;UnitRow&gt; {}</c>,
     /// where <c>UnitRow</c> is a <c>[Serializable]</c> class implementing <see cref="ISheetRow"/>.
+    /// Rows implementing <see cref="ISheetTableRow"/> are given this table when the index is rebuilt.
     /// </summary>
-    public abstract class SheetTable<TRow> : ScriptableObject, ISheetTableData where TRow : ISheetRow
+    public abstract class SheetTable<TRow> : SheetTableBase, ISheetTableData where TRow : ISheetRow
     {
         [SerializeField] private List<TRow> rows = new List<TRow>();
 
@@ -61,6 +62,11 @@ namespace Kentavr.SheetsToSO
             RebuildIndex();
         }
 
+        void ISheetTableData.SetLinkedTables(IList<SheetTableBase> tables)
+        {
+            ReplaceLinkedTables(tables);
+        }
+
         protected virtual void OnEnable()
         {
             RebuildIndex();
@@ -85,6 +91,15 @@ namespace Kentavr.SheetsToSO
         {
             index = RowIndex<TRow>.Build(rows);
 
+            if (rows != null)
+            {
+                foreach (var row in rows)
+                {
+                    if (row is ISheetTableRow tableRow)
+                        tableRow.SetTable(this);
+                }
+            }
+
             foreach (var duplicateId in index.DuplicateIds)
             {
                 Debug.LogError($"Table '{name}': duplicate id '{duplicateId}', only the first row is used.", this);
@@ -107,5 +122,8 @@ namespace Kentavr.SheetsToSO
 
         /// <summary>Replaces all rows and rebuilds the id index. Every item must be a <see cref="RowType"/>.</summary>
         void SetRows(System.Collections.IList rows);
+
+        /// <summary>Replaces the tables the <c>ref&lt;X&gt;</c> columns point to; <c>null</c> items are skipped.</summary>
+        void SetLinkedTables(IList<SheetTableBase> tables);
     }
 }
