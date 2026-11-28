@@ -14,7 +14,9 @@ namespace Kentavr.SheetsToSO.Editor
     /// <remarks>
     /// The <see cref="MenuItem"/> path is fixed at compile time (English). For another editor language the item is
     /// replaced with a translated one through the internal <c>UnityEditor.Menu</c> API; when that API is missing,
-    /// the English item stays.
+    /// the English item stays. After a domain reload Unity builds the menu from <see cref="MenuItem"/> attributes
+    /// later than the first <c>delayCall</c>, so the replacement is retried on <c>EditorApplication.update</c> until
+    /// the menu shows the wanted item or a retry limit is reached.
     /// </remarks>
     [InitializeOnLoad]
     internal static class ImportCsvFolderMenu
@@ -35,20 +37,64 @@ namespace Kentavr.SheetsToSO.Editor
 
         private static readonly MethodInfo MenuItemExistsMethod = FindMenuMethod("MenuItemExists", typeof(string));
 
+        // Retry limits after a domain reload; when they run out, the English item stays.
+        private const int MaxMenuRetries = 600;
+        private const double MenuRetrySeconds = 10;
+
         // Path of the item now in the menu; after a domain reload the menu has the [MenuItem] path.
         private static string shownPath = MenuPath;
+
+        private static int menuRetries;
+        private static double menuRetryStart = -1;
 
         static ImportCsvFolderMenu()
         {
             EditorLocale.Changed += UpdateMenuItem;
-            // Menus are rebuilt from [MenuItem] attributes after the domain is loaded.
-            EditorApplication.delayCall += UpdateMenuItem;
+            // Menus are rebuilt from [MenuItem] attributes after the domain is loaded, later than the first delayCall:
+            // retry every editor frame until the item is on the wanted language or the limit is reached.
+            EditorApplication.update += RetryMenuUpdate;
+        }
+
+        private static void RetryMenuUpdate()
+        {
+            if (AddMenuItemMethod == null || RemoveMenuItemMethod == null)
+            {
+                EditorApplication.update -= RetryMenuUpdate;
+                return;
+            }
+
+            if (menuRetryStart < 0)
+                menuRetryStart = EditorApplication.timeSinceStartup;
+
+            UpdateMenuItem();
+            menuRetries++;
+
+            if (IsMenuOnWantedLanguage() || menuRetries >= MaxMenuRetries
+                || EditorApplication.timeSinceStartup - menuRetryStart >= MenuRetrySeconds)
+                EditorApplication.update -= RetryMenuUpdate;
+        }
+
+        private static bool IsMenuOnWantedLanguage()
+        {
+            var wanted = MenuFolder + L.T(TextKey.MenuImportCsvFolder);
+            if (wanted == MenuPath)
+                return true;
+            if (MenuItemExistsMethod == null)
+                return shownPath == wanted;
+            return InMenu(wanted) && !InMenu(MenuPath);
         }
 
         private static void UpdateMenuItem()
         {
+            if (AddMenuItemMethod == null || RemoveMenuItemMethod == null)
+                return;
+
+            // Unity may have rebuilt the menu from [MenuItem] after our last change: trust the menu, not the field.
+            if (MenuItemExistsMethod != null && !InMenu(shownPath))
+                shownPath = MenuPath;
+
             var wanted = MenuFolder + L.T(TextKey.MenuImportCsvFolder);
-            if (wanted == shownPath || AddMenuItemMethod == null || RemoveMenuItemMethod == null)
+            if (wanted == shownPath)
                 return;
 
             // Add first: if adding fails, the old item stays; if removing the old one fails (or the old one is still
@@ -57,15 +103,15 @@ namespace Kentavr.SheetsToSO.Editor
                     (Func<bool>)CanImport))
                 return;
 
-            if (TryInvoke(RemoveMenuItemMethod, shownPath) && !StillInMenu(shownPath))
+            if (TryInvoke(RemoveMenuItemMethod, shownPath) && !InMenu(shownPath))
                 shownPath = wanted;
             else
                 TryInvoke(RemoveMenuItemMethod, wanted);
         }
 
-        // RemoveMenuItem may return silently without removing the item; check it when Unity lets us.
-        // Without MenuItemExists the removal is trusted.
-        private static bool StillInMenu(string path)
+        // Whether the item is in the menu. RemoveMenuItem may return silently without removing the item; check it
+        // when Unity lets us. Without MenuItemExists the answer is false, i.e. the removal is trusted.
+        private static bool InMenu(string path)
         {
             if (MenuItemExistsMethod == null)
                 return false;
