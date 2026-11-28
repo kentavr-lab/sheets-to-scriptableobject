@@ -26,6 +26,16 @@ namespace Kentavr.SheetsToSO.Editor
         /// <summary>Warnings, e.g. enum values kept although no longer in the sheets. Do not fail the import.</summary>
         public List<string> Warnings { get; } = new List<string>();
 
+        /// <summary>Asset each warning is about, for the Console link; warnings without an asset are not here.</summary>
+        internal Dictionary<string, string> WarningAssets { get; } = new Dictionary<string, string>();
+
+        /// <summary>Adds a warning about the asset at <paramref name="assetPath"/>.</summary>
+        internal void AddWarning(string message, string assetPath)
+        {
+            Warnings.Add(message);
+            WarningAssets[message] = assetPath;
+        }
+
         /// <summary>Errors; when any, nothing or only part of the import was applied (see the messages).</summary>
         public List<string> Errors { get; } = new List<string>();
 

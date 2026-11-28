@@ -26,7 +26,6 @@ namespace Kentavr.SheetsToSO.Editor
         internal const string SnapshotFolder = "Library/Kentavr.SheetsToSO/snapshots";
 
         private const string LogPrefix = "Sheets to SO: ";
-        private const string TableSuffix = "Table";
         private const string AssetsRoot = "Assets";
 
         private static readonly UTF8Encoding Utf8NoBom = new UTF8Encoding(false);
@@ -227,13 +226,13 @@ namespace Kentavr.SheetsToSO.Editor
             foreach (var sheet in prepared.Sheets)
             {
                 var rowClass = sheet.SheetName;
-                var tableClass = rowClass + TableSuffix;
+                var tableClass = rowClass + CodeGenerator.TableSuffix;
                 try
                 {
                     files.Add(new KeyValuePair<string, string>($"{folder}/{rowClass}.cs",
                         CodeGenerator.GenerateRowClass(rowClass, sheet.Columns, prepared.Options)));
                     files.Add(new KeyValuePair<string, string>($"{folder}/{tableClass}.cs",
-                        CodeGenerator.GenerateTableClass(tableClass, rowClass, prepared.Options)));
+                        CodeGenerator.GenerateTableClass(tableClass, rowClass, sheet.Columns, prepared.Options)));
                 }
                 catch (ArgumentException e)
                 {
@@ -338,7 +337,7 @@ namespace Kentavr.SheetsToSO.Editor
             tableTypes = new Dictionary<string, Type>(StringComparer.Ordinal);
             foreach (var sheet in prepared.Sheets)
             {
-                var fullName = prepared.Options.Namespace + "." + sheet.SheetName + TableSuffix;
+                var fullName = prepared.Options.Namespace + "." + sheet.SheetName + CodeGenerator.TableSuffix;
                 if (byName.TryGetValue(fullName, out var type))
                 {
                     tableTypes.Add(sheet.SheetName, type);
@@ -359,6 +358,7 @@ namespace Kentavr.SheetsToSO.Editor
             var folder = prepared.Request.assetFolder;
             EnsureFolder(folder);
 
+            var applied = new Dictionary<string, UnityEngine.Object>(StringComparer.Ordinal);
             foreach (var sheet in prepared.Sheets)
             {
                 var path = $"{folder}/{sheet.SheetName}.asset";
@@ -389,6 +389,7 @@ namespace Kentavr.SheetsToSO.Editor
                     ((ISheetTableData)existing).SetRows(rows);
                     EditorUtility.SetDirty(existing);
                     report.UpdatedAssets.Add(path);
+                    applied.Add(sheet.SheetName, existing);
                 }
                 else if (File.Exists(path))
                 {
@@ -402,14 +403,65 @@ namespace Kentavr.SheetsToSO.Editor
                     ((ISheetTableData)asset).SetRows(rows);
                     AssetDatabase.CreateAsset(asset, path);
                     report.CreatedAssets.Add(path);
+                    applied.Add(sheet.SheetName, asset);
                 }
             }
+
+            LinkTables(prepared, applied, report);
 
             AssetDatabase.SaveAssets();
             FindAssetsWithoutSheet(prepared, report);
 
             if (!report.HasErrors)
                 SaveSnapshot(prepared.Request);
+        }
+
+        // Second pass, after all assets exist: each table gets the assets of the sheets its ref<X> columns point to,
+        // looked up as '<asset folder>/<X>.asset' of type '<Namespace>.XTable'. The list is replaced on every import.
+        private static void LinkTables(PreparedImport prepared, Dictionary<string, UnityEngine.Object> applied,
+            SheetImportReport report)
+        {
+            var folder = prepared.Request.assetFolder;
+            var found = new Dictionary<string, SheetTableBase>(StringComparer.Ordinal);
+
+            foreach (var sheet in prepared.Sheets)
+            {
+                if (!applied.TryGetValue(sheet.SheetName, out var asset))
+                    continue;
+
+                var path = $"{folder}/{sheet.SheetName}.asset";
+                var linked = new List<SheetTableBase>();
+                foreach (var column in sheet.Columns)
+                {
+                    if (column.Type.Kind != ColumnKind.Ref)
+                        continue;
+
+                    var target = column.Type.TypeName;
+                    var targetPath = $"{folder}/{target}.asset";
+                    var expectedType = prepared.Options.Namespace + "." + target + CodeGenerator.TableSuffix;
+                    if (!found.TryGetValue(target, out var table))
+                    {
+                        var loaded = AssetDatabase.LoadMainAssetAtPath(targetPath);
+                        table = loaded != null && loaded.GetType().FullName == expectedType ? loaded as SheetTableBase : null;
+                        found.Add(target, table);
+                    }
+
+                    if (table == null)
+                    {
+                        report.AddWarning(
+                            $"{path}: column '{column.Name}' refers to sheet '{target}', but '{targetPath}' is not " +
+                            $"a '{expectedType}' asset; {sheet.SheetName}.{CodeGenerator.RefPropertyName(column.Name)} will return null",
+                            path);
+                        continue;
+                    }
+
+                    if (!linked.Contains(table))
+                        linked.Add(table);
+                }
+
+                ((ISheetTableData)asset).SetLinkedTables(linked);
+                EditorUtility.SetDirty(asset);
+            }
         }
 
         private static string SnapshotPath(string assetFolder) =>
@@ -525,7 +577,12 @@ namespace Kentavr.SheetsToSO.Editor
                     AssetDatabase.LoadMainAssetAtPath(path));
 
             foreach (var warning in report.Warnings)
-                Debug.LogWarning(LogPrefix + warning);
+            {
+                var context = report.WarningAssets.TryGetValue(warning, out var assetPath)
+                    ? AssetDatabase.LoadMainAssetAtPath(assetPath)
+                    : null;
+                Debug.LogWarning(LogPrefix + warning, context);
+            }
 
             foreach (var error in report.Errors)
                 Debug.LogError(LogPrefix + error);
