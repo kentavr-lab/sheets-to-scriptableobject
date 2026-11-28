@@ -72,6 +72,33 @@ namespace Kentavr.SheetsToSO.Cli.Tests
         }
 
         [Test]
+        public async Task Csv_ParseErrorAndBrokenRef_BothReported()
+        {
+            var units = Write("Units.csv", UnitsHeader + "\nknight,Knight,abc,Common,sword\narcher,Archer,60,Rare,sword_02\n");
+            var weapons = Write("Weapons.tsv", WeaponsTsv);
+
+            var run = await RunAsync("--source", "csv", "--file", units, "--file", weapons);
+
+            Assert.That(run.Code, Is.EqualTo(1), run.ToString());
+            Assert.That(run.Out, Does.Contain("error: Units!C2: "));
+            Assert.That(run.Out, Does.Contain("error: Units!E3: ").And.Contain("sword_02"));
+            Assert.That(run.Out, Does.Contain("errors: 2"));
+        }
+
+        [Test]
+        public async Task Csv_TargetSheetWithBrokenIdHeader_NoFalseBrokenRefs()
+        {
+            var units = Write("Units.csv", UnitsHeader + "\nknight,Knight,100,Common,sword\narcher,Archer,60,Rare,bow\n");
+            var weapons = Write("Weapons.tsv", "id:strng\tdamage:int\nsword\t10\nbow\t7\n");
+
+            var run = await RunAsync("--source", "csv", "--file", units, "--file", weapons);
+
+            Assert.That(run.Code, Is.EqualTo(1), run.ToString());
+            Assert.That(run.Out, Does.Contain("error: Weapons!A1: "));
+            Assert.That(run.Out, Does.Not.Contain("error: Units!"));
+        }
+
+        [Test]
         public async Task Csv_UnclosedQuote_ExitOne()
         {
             var units = Write("Units.csv", "id,name:string\nknight,\"Knight\n");

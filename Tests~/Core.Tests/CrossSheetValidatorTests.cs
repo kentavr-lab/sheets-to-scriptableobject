@@ -243,6 +243,51 @@ namespace Kentavr.SheetsToSO.Core.Tests
             Assert.That(error.Address, Is.EqualTo("Units!E2"));
         }
 
+        [TestCase("id:strng")]
+        [TestCase("name")]
+        public void RefsToSheetWithoutIdColumnAreNotChecked(string firstHeader)
+        {
+            var weapons = SheetParser.Parse("Weapons", new[]
+            {
+                new[] { firstHeader, "damage:int" },
+                new[] { "sword_01", "10" },
+            });
+            Assert.That(weapons.Columns.Select(c => c.Name), Has.None.EqualTo("id"));
+            var units = Sheet("Units", UnitsHeader,
+                new[] { "knight", "Knight", "10", "", "axe_99", "bow_01|sword_01" });
+
+            var result = Validate(weapons, units);
+
+            Assert.That(result.Errors, Is.Empty, string.Join("; ", result.Errors));
+        }
+
+        [Test]
+        public void SheetWithoutIdColumnIsStillChecked()
+        {
+            var items = SheetParser.Parse("Items", new[]
+            {
+                new[] { "id:strng", "rarity:enum<Rarity>", "weapon:ref<Weapons>" },
+                new[] { "sword", "1st", "axe_99" },
+            });
+
+            var result = Validate(Weapons(), items);
+
+            Assert.That(result.Errors.Select(e => e.Address), Is.EqualTo(new[] { "Items!B2", "Items!C2" }),
+                string.Join("; ", result.Errors));
+        }
+
+        [Test]
+        public void RefToSheetNotInSetIsStillUnknown()
+        {
+            var units = Sheet("Units", new[] { "id", "weapon:ref<Weapons>" }, new[] { "knight", "sword_01" });
+            var other = SheetParser.Parse("Other", new[] { new[] { "name" }, new[] { "a" } });
+
+            var error = SingleError(Validate(units, other));
+
+            Assert.That(error.CellCode, Is.EqualTo(CellErrorCode.UnknownRefSheet));
+            Assert.That(error.Address, Is.EqualTo("Units!B1"));
+        }
+
         [Test]
         public void ThrowsOnInvalidArguments()
         {
