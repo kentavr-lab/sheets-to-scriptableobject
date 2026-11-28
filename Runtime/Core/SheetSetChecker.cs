@@ -15,16 +15,15 @@ namespace Kentavr.SheetsToSO.Core
         /// <summary>Error of an empty sheet set.</summary>
         public const string NoSheetsError = "No sheets to import";
 
-        private const string TableSuffix = "Table";
-
         private static readonly EnumMembersResult NoEnums = new EnumMembersResult(
             Array.Empty<string>(), new Dictionary<string, IReadOnlyList<string>>(), Array.Empty<SheetError>());
 
         /// <summary>
         /// Parses and checks the sheets: names (empty, repeated ignoring case), headers and values,
-        /// <c>id</c> as the first <c>string</c> column, <c>ref&lt;&gt;</c> and <c>enum&lt;&gt;</c> values across sheets
-        /// and type name conflicts of the generated code. Errors are collected, never thrown. Cross-sheet and type name
-        /// checks run even with parse errors, so all errors are seen at once; only sheet name errors skip them.
+        /// <c>id</c> as the first <c>string</c> column, <c>ref&lt;&gt;</c> and <c>enum&lt;&gt;</c> values across sheets,
+        /// type name conflicts of the generated code and names of the generated <c>ref&lt;&gt;</c> properties.
+        /// Errors are collected, never thrown. Cross-sheet, type name and property name checks run even with
+        /// parse errors, so all errors are seen at once; only sheet name errors skip them.
         /// </summary>
         /// <param name="sheets">Sheet names and raw cells; <c>Rows[0]</c> is the header. A <c>null</c> row counts as empty.</param>
         public static SheetSetCheckResult Check(IReadOnlyList<(string Name, IReadOnlyList<IReadOnlyList<string>> Rows)> sheets)
@@ -146,10 +145,25 @@ namespace Kentavr.SheetsToSO.Core
             foreach (var sheet in generated)
             {
                 AddTypeName(typeOwners, sheet.SheetName, $"row class of sheet '{sheet.SheetName}'", errors);
-                AddTypeName(typeOwners, sheet.SheetName + TableSuffix, $"table class of sheet '{sheet.SheetName}'", errors);
+                AddTypeName(typeOwners, sheet.SheetName + CodeGenerator.TableSuffix,
+                    $"table class of sheet '{sheet.SheetName}'", errors);
             }
             foreach (var enumName in enums.EnumNames)
                 AddTypeName(typeOwners, enumName, $"enum '{enumName}'", errors);
+
+            // Generated ref<X> properties must not clash with members of the row class
+            // (sheets in schema-from-code mode get no generated properties).
+            foreach (var sheet in generated)
+            {
+                foreach (var column in sheet.Columns)
+                {
+                    if (column.Type.Kind != ColumnKind.Ref)
+                        continue;
+                    var conflict = CodeGenerator.FindRefPropertyConflict(column, sheet.Columns, sheet.SheetName);
+                    if (conflict != null)
+                        errors.Add($"{sheet.SheetName}!{column.Address}: Column '{column.Name}': {conflict}");
+                }
+            }
 
             return new SheetSetCheckResult(parsed.AsReadOnly(), errors.Count == 0 ? enums : NoEnums, errors.AsReadOnly(),
                 rowTypes);
